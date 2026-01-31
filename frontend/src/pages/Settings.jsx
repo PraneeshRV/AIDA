@@ -1,0 +1,1211 @@
+import { useState, useEffect } from 'react';
+import {
+  Settings as SettingsIcon,
+  Server,
+  Database,
+  Terminal,
+  Info,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
+  ExternalLink,
+  Globe,
+  Mail,
+  Clock,
+  Save,
+  Moon,
+  Sun,
+  FolderOpen
+} from '../components/icons';
+import apiClient from '../services/api';
+import workspaceService from '../services/workspaceService';
+import { useTheme } from '../contexts/ThemeContext';
+
+const Settings = () => {
+  const { theme, toggleTheme, isDark, primaryColor, setPrimaryColor, colorThemes } = useTheme();
+  const [activeTab, setActiveTab] = useState('general');
+  const [systemStatus, setSystemStatus] = useState({
+    backend: { status: 'checking', latency: 0, version: '' },
+    database: { status: 'checking', connected: false, version: '' },
+    exegol: { status: 'checking', running: false, container: '' }
+  });
+  const [systemInfo, setSystemInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [commandTimeout, setCommandTimeout] = useState(300);
+  const [originalTimeout, setOriginalTimeout] = useState(300);
+  const [savingTimeout, setSavingTimeout] = useState(false);
+  const [timeoutMessage, setTimeoutMessage] = useState(null);
+  const [approvalTimeout, setApprovalTimeout] = useState(30);
+  const [originalApprovalTimeout, setOriginalApprovalTimeout] = useState(30);
+  const [savingApprovalTimeout, setSavingApprovalTimeout] = useState(false);
+  const [approvalTimeoutMessage, setApprovalTimeoutMessage] = useState(null);
+  const [containerName, setContainerName] = useState('');
+  const [originalContainerName, setOriginalContainerName] = useState('');
+  const [savingContainer, setSavingContainer] = useState(false);
+  const [containerMessage, setContainerMessage] = useState(null);
+  const [availableContainers, setAvailableContainers] = useState([]);
+  const [loadingContainers, setLoadingContainers] = useState(false);
+  const [outputMaxLength, setOutputMaxLength] = useState(5000);
+  const [originalOutputMaxLength, setOriginalOutputMaxLength] = useState(5000);
+  const [savingOutputMaxLength, setSavingOutputMaxLength] = useState(false);
+  const [outputMaxLengthMessage, setOutputMaxLengthMessage] = useState(null);
+  const [commandHistoryLimit, setCommandHistoryLimit] = useState(10);
+  const [originalHistoryLimit, setOriginalHistoryLimit] = useState(10);
+  const [savingHistoryLimit, setSavingHistoryLimit] = useState(false);
+  const [historyLimitMessage, setHistoryLimitMessage] = useState(null);
+  const [openingWorkspace, setOpeningWorkspace] = useState(false);
+  const [workspaceMessage, setWorkspaceMessage] = useState(null);
+
+  useEffect(() => {
+    loadSystemStatus();
+    loadSystemInfo();
+    loadCommandTimeout();
+    loadApprovalTimeout();
+    loadOutputMaxLength();
+    loadCommandHistoryLimit();
+    loadExegolContainers();
+  }, []);
+
+  const loadSystemStatus = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get('/system/status');
+      setSystemStatus(data);
+    } catch (error) {
+      // console.error('Failed to load system status:', error);
+      setSystemStatus({
+        backend: { status: 'error', latency: 0, version: '' },
+        database: { status: 'error', connected: false, version: '' },
+        exegol: { status: 'error', running: false, container: '' }
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSystemInfo = async () => {
+    try {
+      const { data } = await apiClient.get('/system/info');
+      setSystemInfo(data);
+      if (data.container_name) {
+        setContainerName(data.container_name);
+        setOriginalContainerName(data.container_name);
+      }
+    } catch (error) {
+      // console.error('Failed to load system info:', error);
+    }
+  };
+
+  const loadCommandTimeout = async () => {
+    try {
+      const { data } = await apiClient.get('/system/settings/command_timeout');
+      const timeoutValue = parseInt(data.value);
+      setCommandTimeout(timeoutValue);
+      setOriginalTimeout(timeoutValue);
+    } catch (error) {
+      // console.error('Failed to load command timeout:', error);
+      // Use default value if loading fails
+      setCommandTimeout(300);
+      setOriginalTimeout(300);
+    }
+  };
+
+  const loadOutputMaxLength = async () => {
+    try {
+      const { data } = await apiClient.get('/system/settings/output_max_length');
+      const maxLengthValue = parseInt(data.value);
+      setOutputMaxLength(maxLengthValue);
+      setOriginalOutputMaxLength(maxLengthValue);
+    } catch (error) {
+      // console.error('Failed to load output max length:', error);
+      // Use default value if loading fails
+      setOutputMaxLength(5000);
+      setOriginalOutputMaxLength(5000);
+    }
+  };
+
+  const loadExegolContainers = async () => {
+    setLoadingContainers(true);
+    try {
+      const { data } = await apiClient.get('/system/exegol/containers');
+      setAvailableContainers(data.containers || []);
+    } catch (error) {
+      // console.error('Failed to load Exegol containers:', error);
+      setAvailableContainers([]);
+    } finally {
+      setLoadingContainers(false);
+    }
+  };
+
+  const handleSaveTimeout = async () => {
+    // Validate timeout value
+    if (commandTimeout < 30 || commandTimeout > 1800) {
+      setTimeoutMessage({ type: 'error', text: 'Timeout must be between 30 and 1800 seconds (30s to 30min)' });
+      setTimeout(() => setTimeoutMessage(null), 5000);
+      return;
+    }
+
+    setSavingTimeout(true);
+    setTimeoutMessage(null);
+
+    try {
+      await apiClient.put('/system/settings/command_timeout', {
+        value: commandTimeout.toString()
+      });
+
+      setOriginalTimeout(commandTimeout);
+      setTimeoutMessage({ type: 'success', text: 'Command timeout updated successfully' });
+      setTimeout(() => setTimeoutMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save command timeout:', error);
+      setTimeoutMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save timeout setting' });
+      setTimeout(() => setTimeoutMessage(null), 5000);
+    } finally {
+      setSavingTimeout(false);
+    }
+  };
+
+  const handleTimeoutPreset = (seconds) => {
+    setCommandTimeout(seconds);
+  };
+
+  const loadApprovalTimeout = async () => {
+    try {
+      const { data } = await apiClient.get('/command-settings');
+      const timeoutValue = data.timeout_seconds || 30;
+      setApprovalTimeout(timeoutValue);
+      setOriginalApprovalTimeout(timeoutValue);
+    } catch (error) {
+      // console.error('Failed to load approval timeout:', error);
+      setApprovalTimeout(30);
+      setOriginalApprovalTimeout(30);
+    }
+  };
+
+  const handleSaveApprovalTimeout = async () => {
+    if (approvalTimeout < 10 || approvalTimeout > 600) {
+      setApprovalTimeoutMessage({ type: 'error', text: 'Timeout must be between 10 and 600 seconds (10s to 10min)' });
+      setTimeout(() => setApprovalTimeoutMessage(null), 5000);
+      return;
+    }
+
+    setSavingApprovalTimeout(true);
+    setApprovalTimeoutMessage(null);
+
+    try {
+      await apiClient.put('/command-settings', { timeout_seconds: approvalTimeout });
+
+      setOriginalApprovalTimeout(approvalTimeout);
+      setApprovalTimeoutMessage({ type: 'success', text: 'Approval timeout updated successfully' });
+      setTimeout(() => setApprovalTimeoutMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save approval timeout:', error);
+      setApprovalTimeoutMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save approval timeout' });
+      setTimeout(() => setApprovalTimeoutMessage(null), 5000);
+    } finally {
+      setSavingApprovalTimeout(false);
+    }
+  };
+
+  const handleApprovalTimeoutPreset = (seconds) => {
+    setApprovalTimeout(seconds);
+  };
+
+  const handleSaveOutputMaxLength = async () => {
+    // Validate output max length value
+    if (outputMaxLength !== -1 && (outputMaxLength < 500 || outputMaxLength > 100000)) {
+      setOutputMaxLengthMessage({ type: 'error', text: 'Output max length must be between 500 and 100000 characters, or -1 for unlimited' });
+      setTimeout(() => setOutputMaxLengthMessage(null), 5000);
+      return;
+    }
+
+    setSavingOutputMaxLength(true);
+    setOutputMaxLengthMessage(null);
+
+    try {
+      await apiClient.put('/system/settings/output_max_length', {
+        value: outputMaxLength.toString()
+      });
+
+      setOriginalOutputMaxLength(outputMaxLength);
+      setOutputMaxLengthMessage({ type: 'success', text: 'Output max length updated successfully' });
+      setTimeout(() => setOutputMaxLengthMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save output max length:', error);
+      setOutputMaxLengthMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save output max length setting' });
+      setTimeout(() => setOutputMaxLengthMessage(null), 5000);
+    } finally {
+      setSavingOutputMaxLength(false);
+    }
+  };
+
+  const handleOutputMaxLengthPreset = (value) => {
+    setOutputMaxLength(value);
+  };
+
+  const loadCommandHistoryLimit = async () => {
+    try {
+      const { data } = await apiClient.get('/system/settings/command_history_limit');
+      const limitValue = parseInt(data.value);
+      setCommandHistoryLimit(limitValue);
+      setOriginalHistoryLimit(limitValue);
+    } catch (error) {
+      console.error('Failed to load command history limit:', error);
+      // Use default value if loading fails
+      setCommandHistoryLimit(10);
+      setOriginalHistoryLimit(10);
+    }
+  };
+
+  const handleSaveCommandHistoryLimit = async () => {
+    // Validate history limit value
+    if (commandHistoryLimit < 5 || commandHistoryLimit > 100) {
+      setHistoryLimitMessage({ type: 'error', text: 'Command history limit must be between 5 and 100' });
+      setTimeout(() => setHistoryLimitMessage(null), 5000);
+      return;
+    }
+
+    setSavingHistoryLimit(true);
+    setHistoryLimitMessage(null);
+
+    try {
+      await apiClient.put('/system/settings/command_history_limit', {
+        value: commandHistoryLimit.toString()
+      });
+
+      setOriginalHistoryLimit(commandHistoryLimit);
+      setHistoryLimitMessage({ type: 'success', text: 'Command history limit updated successfully' });
+      setTimeout(() => setHistoryLimitMessage(null), 3000);
+    } catch (error) {
+      console.error('Failed to save command history limit:', error);
+      setHistoryLimitMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save command history limit setting' });
+      setTimeout(() => setHistoryLimitMessage(null), 5000);
+    } finally {
+      setSavingHistoryLimit(false);
+    }
+  };
+
+  const handleHistoryLimitPreset = (value) => {
+    setCommandHistoryLimit(value);
+  };
+
+  const handleOpenWorkspace = async () => {
+    setOpeningWorkspace(true);
+    setWorkspaceMessage(null);
+
+    try {
+      const result = await workspaceService.openRootWorkspace();
+
+      if (result.success && result.host_path) {
+        // Try to open via local folder opener service (runs on host)
+        try {
+          const { openFolderOnHost } = await import('../services/folderOpenerService');
+          const openResult = await openFolderOnHost(result.host_path);
+          if (openResult.success) {
+            setWorkspaceMessage({
+              type: 'success',
+              text: `Opened in ${openResult.os} file explorer`
+            });
+            setTimeout(() => setWorkspaceMessage(null), 3000);
+            return;
+          }
+        } catch (serviceError) {
+          console.log('Folder opener service not available:', serviceError.message);
+        }
+
+        // Fallback: Copy path to clipboard
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(result.host_path);
+          setWorkspaceMessage({
+            type: 'success',
+            text: `Path copied: ${result.host_path}`
+          });
+        } else {
+          setWorkspaceMessage({
+            type: 'success',
+            text: result.host_path
+          });
+        }
+        setTimeout(() => setWorkspaceMessage(null), 5000);
+      }
+    } catch (error) {
+      console.error('Failed to open workspace:', error);
+      setWorkspaceMessage({
+        type: 'error',
+        text: error.response?.data?.detail || 'Failed to get workspace path'
+      });
+      setTimeout(() => setWorkspaceMessage(null), 5000);
+    } finally {
+      setOpeningWorkspace(false);
+    }
+  };
+
+  const formatOutputLength = (length) => {
+    if (length === -1) return 'Unlimited';
+    if (length < 1000) return `${length} chars`;
+    return `${(length / 1000).toFixed(1)}K chars`;
+  };
+
+  const handleSaveContainer = async () => {
+    if (!containerName || containerName.trim() === '') {
+      setContainerMessage({ type: 'error', text: 'Container name cannot be empty' });
+      setTimeout(() => setContainerMessage(null), 5000);
+      return;
+    }
+
+    setSavingContainer(true);
+    setContainerMessage(null);
+
+    try {
+      await apiClient.put('/system/settings/container_name', {
+        value: containerName.trim()
+      });
+
+      setOriginalContainerName(containerName.trim());
+      setContainerMessage({ type: 'success', text: 'Container name updated successfully' });
+      setTimeout(() => setContainerMessage(null), 3000);
+
+      // Reload system info and status
+      await loadSystemInfo();
+      await loadSystemStatus();
+    } catch (error) {
+      console.error('Failed to save container name:', error);
+      setContainerMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save container name' });
+      setTimeout(() => setContainerMessage(null), 5000);
+    } finally {
+      setSavingContainer(false);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+  };
+
+  const tabs = [
+    { id: 'general', label: 'General', icon: SettingsIcon },
+    { id: 'tools', label: 'Tools', icon: Terminal },
+    { id: 'about', label: 'About', icon: Info }
+  ];
+
+  return (
+    <div className="space-y-6 animate-in">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">Settings</h1>
+        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
+          System status and configuration
+        </p>
+      </div>
+
+      {/* Horizontal Tabs Navigation */}
+      <div className="border-b border-neutral-200 dark:border-neutral-700">
+        <nav className="flex gap-8">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 pb-3 border-b-2 transition-colors ${activeTab === tab.id
+                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                  : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="font-medium text-sm">{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Content Area */}
+      <div className="pb-12">
+        {/* TAB 1: GENERAL */}
+        {activeTab === 'general' && (
+          <div className="space-y-6">
+            {/* Appearance Settings */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Appearance</h2>
+
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg divide-y divide-neutral-200 dark:divide-neutral-700">
+                {/* Theme Toggle */}
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isDark ? (
+                      <Moon className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    ) : (
+                      <Sun className="w-4 h-4 text-neutral-500" />
+                    )}
+                    <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Theme</span>
+                  </div>
+                  <button
+                    onClick={toggleTheme}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-primary-600' : 'bg-neutral-300'
+                      }`}
+                    role="switch"
+                    aria-checked={isDark}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Primary Color */}
+                <div className="p-4">
+                  <div className="text-sm font-medium text-neutral-900 dark:text-neutral-100 mb-3">Primary Color</div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {Object.entries(colorThemes).map(([key, colorTheme]) => {
+                      const isActive = primaryColor === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => setPrimaryColor(key)}
+                          className={`flex items-center gap-2 p-2 rounded border transition-colors ${isActive
+                            ? 'border-primary-500 bg-primary-100/50 dark:bg-primary-900/20'
+                            : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-white dark:bg-neutral-800'
+                            }`}
+                          title={colorTheme.name}
+                        >
+                          <div
+                            className="w-5 h-5 rounded-full"
+                            style={{ backgroundColor: colorTheme.colors[500] }}
+                          />
+                          <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100">{colorTheme.name}</span>
+                          {isActive && <CheckCircle className="w-3 h-3 text-primary-600 dark:text-primary-400 ml-auto" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Command Settings */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Command Settings</h2>
+
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Command Timeout</span>
+                </div>
+
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { label: '3m', value: 180 },
+                    { label: '5m', value: 300 },
+                    { label: '10m', value: 600 },
+                    { label: '15m', value: 900 },
+                    { label: '30m', value: 1800 }
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      onClick={() => handleTimeoutPreset(preset.value)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${commandTimeout === preset.value
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500'
+                        }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Input */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="30"
+                    max="1800"
+                    value={commandTimeout}
+                    onChange={(e) => setCommandTimeout(parseInt(e.target.value) || 30)}
+                    className="w-24 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">seconds ({formatTime(commandTimeout)})</span>
+                  <button
+                    onClick={handleSaveTimeout}
+                    disabled={savingTimeout || commandTimeout === originalTimeout}
+                    className="ml-auto px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {savingTimeout ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Success/Error Message */}
+                {timeoutMessage && (
+                  <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${timeoutMessage.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    }`}>
+                    {timeoutMessage.type === 'success' ? (
+                      <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span>{timeoutMessage.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Approval Timeout Setting */}
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Approval Timeout</span>
+                  <span className="text-xs text-neutral-500">(Command Approval)</span>
+                </div>
+
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { label: '15s', value: 15 },
+                    { label: '30s', value: 30 },
+                    { label: '1m', value: 60 },
+                    { label: '2m', value: 120 },
+                    { label: '5m', value: 300 }
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      onClick={() => handleApprovalTimeoutPreset(preset.value)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${approvalTimeout === preset.value
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500'
+                        }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Input */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="10"
+                    max="600"
+                    value={approvalTimeout}
+                    onChange={(e) => setApprovalTimeout(parseInt(e.target.value) || 30)}
+                    className="w-24 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">seconds ({formatTime(approvalTimeout)})</span>
+                  <button
+                    onClick={handleSaveApprovalTimeout}
+                    disabled={savingApprovalTimeout || approvalTimeout === originalApprovalTimeout}
+                    className="ml-auto px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {savingApprovalTimeout ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
+                  Time to wait for user approval before rejecting a blocked command.
+                </p>
+
+                {/* Success/Error Message */}
+                {approvalTimeoutMessage && (
+                  <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${approvalTimeoutMessage.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    }`}>
+                    {approvalTimeoutMessage.type === 'success' ? (
+                      <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span>{approvalTimeoutMessage.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Output Max Length Setting */}
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Terminal className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Output Max Length</span>
+                </div>
+
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    { label: '1K', value: 1000 },
+                    { label: '2.5K', value: 2500 },
+                    { label: '5K', value: 5000 },
+                    { label: '10K', value: 10000 },
+                    { label: '50K', value: 50000 },
+                    { label: 'Unlimited', value: -1 }
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      onClick={() => handleOutputMaxLengthPreset(preset.value)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${outputMaxLength === preset.value
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500'
+                        }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Input */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="-1"
+                    max="100000"
+                    value={outputMaxLength}
+                    onChange={(e) => setOutputMaxLength(parseInt(e.target.value) || 500)}
+                    className="w-32 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                    characters ({formatOutputLength(outputMaxLength)})
+                  </span>
+                  <button
+                    onClick={handleSaveOutputMaxLength}
+                    disabled={savingOutputMaxLength || outputMaxLength === originalOutputMaxLength}
+                    className="ml-auto px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {savingOutputMaxLength ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
+                  Controls how much command output is shown before truncation. Use -1 for unlimited output.
+                </p>
+
+                {/* Success/Error Message */}
+                {outputMaxLengthMessage && (
+                  <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${outputMaxLengthMessage.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    }`}>
+                    {outputMaxLengthMessage.type === 'success' ? (
+                      <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span>{outputMaxLengthMessage.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Command History Limit Setting */}
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Command History Limit</span>
+                </div>
+
+                {/* Preset Buttons */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[5, 10, 20, 50, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => handleHistoryLimitPreset(preset)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${commandHistoryLimit === preset
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500'
+                        }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Input */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={commandHistoryLimit}
+                    onChange={(e) => setCommandHistoryLimit(Math.min(100, Math.max(5, parseInt(e.target.value) || 5)))}
+                    className="w-24 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">commands</span>
+                  <button
+                    onClick={handleSaveCommandHistoryLimit}
+                    disabled={savingHistoryLimit || commandHistoryLimit === originalHistoryLimit}
+                    className="ml-auto px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {savingHistoryLimit ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
+                  Number of recent commands to include when loading an assessment via MCP.
+                </p>
+
+                {/* Success/Error Message */}
+                {historyLimitMessage && (
+                  <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${historyLimitMessage.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    }`}>
+                    {historyLimitMessage.type === 'success' ? (
+                      <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span>{historyLimitMessage.text}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* System Info */}
+            {systemInfo && (
+              <div className="bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-400">
+                  <Info className="w-3 h-3" />
+                  <span>{systemInfo.platform_name} v{systemInfo.version}</span>
+                  <span>•</span>
+                  <span>FastAPI {systemInfo.fastapi_version}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: TOOLS */}
+        {activeTab === 'tools' && (
+          <div className="space-y-6">
+            {/* Open Workspace Folder */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
+                Workspace Access
+              </h2>
+
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <div>
+                      <div className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                        Open Workspace Folder
+                      </div>
+                      <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                        Opens /workspace directory in file explorer
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleOpenWorkspace}
+                    disabled={openingWorkspace}
+                    className="px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {openingWorkspace ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Opening
+                      </>
+                    ) : (
+                      <>
+                        <FolderOpen className="w-3 h-3" />
+                        Open Folder
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {workspaceMessage && (
+                  <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${workspaceMessage.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                    : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                    }`}>
+                    {workspaceMessage.type === 'success' ? (
+                      <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span>{workspaceMessage.text}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Exegol Configuration */}
+            {systemInfo && (
+              <div>
+                <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Exegol Configuration</h2>
+
+                <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                        <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Container Selection</span>
+                      </div>
+                      <button
+                        onClick={loadExegolContainers}
+                        disabled={loadingContainers}
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${loadingContainers ? 'animate-spin' : ''}`} />
+                        Detect
+                      </button>
+                    </div>
+
+                    {loadingContainers ? (
+                      <div className="flex items-center justify-center p-4 text-xs text-neutral-500 dark:text-neutral-400">
+                        <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                        Detecting containers...
+                      </div>
+                    ) : availableContainers.length === 0 ? (
+                      <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded text-xs text-yellow-700 dark:text-yellow-400">
+                        <AlertCircle className="w-4 h-4 inline mr-2" />
+                        No Exegol containers detected. Make sure Docker is running and you have Exegol containers.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {availableContainers.map((container) => (
+                          <label
+                            key={container.id}
+                            className={`flex items-center justify-between p-3 border-2 rounded cursor-pointer transition-colors ${containerName === container.name
+                              ? 'border-primary-500 bg-primary-100/50 dark:bg-primary-900/20'
+                              : 'border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
+                              }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="radio"
+                                name="container"
+                                value={container.name}
+                                checked={containerName === container.name}
+                                onChange={(e) => setContainerName(e.target.value)}
+                                className="w-4 h-4 text-primary-600 focus:ring-primary-500"
+                              />
+                              <div>
+                                <div className="text-sm font-mono font-medium text-neutral-900 dark:text-neutral-100">
+                                  {container.name}
+                                </div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                                  {container.image} • {container.id}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {container.status === 'running' ? (
+                                <>
+                                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                                  <span className="text-xs text-green-700 dark:text-green-400">Running</span>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></div>
+                                  <span className="text-xs text-neutral-600 dark:text-neutral-400 capitalize">{container.status}</span>
+                                </>
+                              )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex items-center justify-end">
+                      <button
+                        onClick={handleSaveContainer}
+                        disabled={savingContainer || containerName.trim() === originalContainerName || availableContainers.length === 0}
+                        className="px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        {savingContainer ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            Saving
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-3 h-3" />
+                            Save Selection
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
+                      Default container for new assessments. Change per-assessment using the container badge.
+                    </p>
+
+                    {/* Success/Error Message */}
+                    {containerMessage && (
+                      <div className={`mt-2 p-2 rounded text-xs flex items-center gap-1.5 ${containerMessage.type === 'success'
+                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                        }`}>
+                        {containerMessage.type === 'success' ? (
+                          <CheckCircle className="w-3 h-3 flex-shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                        )}
+                        <span>{containerMessage.text}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-neutral-200 dark:border-neutral-700">
+                    <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Workspace Path</div>
+                    <code className="text-xs font-mono bg-neutral-100 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 px-2 py-1 rounded">
+                      {systemInfo.workspace_base}
+                    </code>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: ABOUT */}
+        {activeTab === 'about' && (
+          <div className="space-y-6">
+            {/* System Information */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Platform Information</h2>
+
+              {systemInfo ? (
+                <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg divide-y divide-neutral-200 dark:divide-neutral-700">
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Platform</span>
+                    <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100">{systemInfo.platform_name} v{systemInfo.version}</span>
+                  </div>
+
+                  {/* Backend Status */}
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Backend API</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">FastAPI {systemInfo.fastapi_version}</span>
+                      {systemStatus.backend.status === 'connected' ? (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">{systemStatus.backend.latency}ms</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-red-700 dark:text-red-400">Error</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Frontend Status */}
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Frontend</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">React + Vite</span>
+                      <div className="flex items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                        <span className="text-xs font-medium text-green-700 dark:text-green-400">Active</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Database Status */}
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Database</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400">PostgreSQL {systemStatus.database.version}</span>
+                      {systemStatus.database.connected ? (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">Connected</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-red-700 dark:text-red-400">Disconnected</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Exegol Container Status */}
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Exegol Container</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-neutral-500 dark:text-neutral-400 max-w-[120px] truncate">{systemStatus.exegol.container || systemInfo.container_name}</span>
+                      {systemStatus.exegol.running ? (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">Running</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                          <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Stopped</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Python Version</span>
+                    <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100">{systemInfo.python_version}</span>
+                  </div>
+
+                  <div className="p-3 flex items-center justify-between">
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400">Environment</span>
+                    <span className="text-xs font-medium text-neutral-900 dark:text-neutral-100 capitalize">{systemInfo.environment}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-6 text-center">
+                  <AlertCircle className="w-8 h-8 mx-auto mb-2 text-neutral-300 dark:text-neutral-600" />
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">Unable to load system information</p>
+                </div>
+              )}
+            </div>
+
+            {/* Links */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Links & Resources</h2>
+
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg divide-y divide-neutral-200 dark:divide-neutral-700">
+                <a
+                  href="https://github.com/Vasco0x4/Aida"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-neutral-500 dark:text-neutral-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">GitHub Repository</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="https://www.vasco0x4.me/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">Author Website</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="mailto:Vasco0x4@proton.me"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">Contact Email</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="http://localhost:8000/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Server className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">API Documentation (Swagger)</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="http://localhost:8000/redoc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">API Documentation (ReDoc)</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="https://github.com/ThePorgs/Exegol"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">Exegol Project</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+
+                <a
+                  href="https://modelcontextprotocol.io/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-3 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                    <span className="text-sm text-neutral-900 dark:text-neutral-100">MCP Protocol</span>
+                  </div>
+                  <ExternalLink className="w-3 h-3 text-neutral-400" />
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Settings;

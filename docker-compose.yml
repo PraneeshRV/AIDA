@@ -1,0 +1,97 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: aida_postgres
+    env_file:
+      - backend/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aida}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aida}
+      POSTGRES_DB: ${POSTGRES_DB:-aida_assessments}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aida-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aida} -d ${POSTGRES_DB:-aida_assessments}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aida_backend
+    env_file:
+      - backend/.env
+    environment:
+      # Override database host to use Docker service name
+      POSTGRES_HOST: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-aida}:${POSTGRES_PASSWORD:-aida}@postgres:5432/${POSTGRES_DB:-aida_assessments}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot reload (exclude venv to avoid conflicts)
+      # :z flag enables SELinux compatibility (RHEL/Fedora)
+      - ./backend:/app:z
+      - /app/venv
+      # Mount Docker socket to allow backend to execute docker commands
+      # SECURITY NOTE: This gives the backend container access to the Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount logs directory with SELinux flag
+      - ./backend/logs:/app/logs:z
+    networks:
+      - aida-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aida_frontend
+    environment:
+      # Frontend talks to backend via localhost (browser runs on host)
+      VITE_API_URL: http://localhost:8000/api
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount source code for hot reload (exclude node_modules to avoid conflicts)
+      # :z flag enables SELinux compatibility (RHEL/Fedora)
+      - ./frontend:/app:z
+      - /app/node_modules
+    networks:
+      - aida-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5173" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  aida-network:
+    name: aida-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: aida_postgres_data
