@@ -273,6 +273,10 @@ AIDA is actively developed. Want to contribute?
 
 ---
 
+Need help? Contact **vasco0x4** on Discord.
+
+---
+
 ## License
 
 **AGPL v3** - Free and open source.

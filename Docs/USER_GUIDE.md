@@ -407,4 +407,4 @@ docker exec -it exegol-aida /bin/zsh
 
 ---
 
-**Need help?** Open an issue on [GitHub](https://github.com/Vasco0x4/AIDA/issues) or contact [Vasco0x4@proton.me](mailto:Vasco0x4@proton.me)
+Need help? Contact **vasco0x4** on Discord.

@@ -219,7 +219,9 @@ TODO
 
 ---
 
-## 📧 Need Help?
+## Need Help?
+
+Need help? Contact **vasco0x4** on Discord.
 
 - **GitHub Issues**: [Report bugs](https://github.com/Vasco0x4/AIDA/issues)
 - **Email**: Vasco0x4@proton.me
