@@ -240,29 +240,51 @@ def generate_mcp_config(db_url: str, quiet=False) -> None:
 
 
 def resolve_workspace(assessment_name: str, backend_url: str) -> Optional[dict]:
-    """Resolve assessment workspace via API"""
-    try:
-        with httpx.Client(timeout=5.0) as client:
-            response = client.get(
-                f"{backend_url}/workspace/resolve",
-                params={"assessment_name": assessment_name}
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            elif response.status_code == 404:
-                return None
+    """Resolve assessment workspace via API, with retry on transient network errors"""
+    import time
+
+    max_retries = 3
+    retry_delays = [1, 2, 4]  # exponential backoff in seconds
+
+    for attempt in range(max_retries):
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    f"{backend_url}/workspace/resolve",
+                    params={"assessment_name": assessment_name}
+                )
+
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 404:
+                    return None
+                else:
+                    # Non-retryable HTTP error, will be handled by caller
+                    return None
+
+        except httpx.ConnectError:
+            # Backend is not reachable at all — don't retry, fail fast
+            console.print("\n[red]✗ Failed to connect to AIDA backend[/red]\n")
+            console.print("[yellow]Troubleshooting:[/yellow]")
+            console.print("  1. Check: [cyan]docker-compose ps[/cyan]")
+            console.print("  2. Start: [cyan]docker-compose up -d[/cyan]")
+            console.print("  3. Test:  [cyan]curl http://localhost:8000/health[/cyan]\n")
+            sys.exit(1)
+
+        except (httpx.ReadError, httpx.WriteError, httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            # Transient network error (e.g. "Connection reset by peer") — retry
+            if attempt < max_retries - 1:
+                console.print(f"[yellow]⚠ Backend connection dropped ({type(e).__name__}), retrying in {retry_delays[attempt]}s...[/yellow]")
+                time.sleep(retry_delays[attempt])
             else:
-                # Silent API error, will be handled by caller
-                return None
-                
-    except httpx.ConnectError:
-        console.print("\n[red]✗ Failed to connect to AIDA backend[/red]\n")
-        console.print("[yellow]Troubleshooting:[/yellow]")
-        console.print("  1. Check: [cyan]docker-compose ps[/cyan]")
-        console.print("  2. Start: [cyan]docker-compose up -d[/cyan]")
-        console.print("  3. Test:  [cyan]curl http://localhost:8000/health[/cyan]\n")
-        sys.exit(1)
+                console.print(f"\n[red]✗ Backend connection failed after {max_retries} attempts: {e}[/red]\n")
+                console.print("[yellow]Troubleshooting:[/yellow]")
+                console.print("  1. Check: [cyan]docker-compose ps[/cyan]")
+                console.print("  2. Restart backend: [cyan]docker-compose restart backend[/cyan]")
+                console.print("  3. Check logs: [cyan]docker-compose logs backend --tail=50[/cyan]\n")
+                sys.exit(1)
+
+    return None
 
 
 def show_assessment_not_found(assessment_name: str, backend_url: str):
@@ -376,6 +398,11 @@ def main(assessment, model, permission_mode, base_url, api_key, no_mcp, debug, q
             console.print("[red]✗ Failed to connect to AIDA backend[/red]")
             console.print("\nStart the backend:")
             console.print("  → [cyan]docker-compose up -d[/cyan]\n")
+            sys.exit(1)
+        except (httpx.ReadError, httpx.WriteError, httpx.PoolTimeout, httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+            console.print(f"[red]✗ Backend connection dropped: {e}[/red]")
+            console.print("\nThe backend reset the connection. Try restarting it:")
+            console.print("  → [cyan]docker-compose restart backend[/cyan]\n")
             sys.exit(1)
     
     # Load PrePrompt

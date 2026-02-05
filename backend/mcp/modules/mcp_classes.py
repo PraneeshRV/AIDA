@@ -235,8 +235,13 @@ class AidaMCPService:
 
     # ========== Docker/Container Methods ==========
 
-    async def _run_command(self, command: List[str]) -> Dict[str, Any]:
-        """Run a system command with improved error handling and no timeout"""
+    async def _run_command(self, command: List[str], timeout: float = 30.0) -> Dict[str, Any]:
+        """Run a system command with timeout to prevent hangs on docker socket issues.
+
+        Timeout is generous (30s) because this is also used for docker exec of
+        pentesting tools via execute_container_command. Short docker management
+        commands (inspect, ps) will complete well under that.
+        """
         try:
             file_log.debug(f"Executing command: {' '.join(command)}")
 
@@ -246,8 +251,10 @@ class AidaMCPService:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            # Wait for process to complete without timeout
-            stdout, stderr = await process.communicate()
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
 
             return {
                 "success": process.returncode == 0,
@@ -256,6 +263,23 @@ class AidaMCPService:
                 "stderr": stderr.decode('utf-8', errors='replace').strip(),
                 "command": ' '.join(command),
                 "error_type": self._classify_error(process.returncode, stderr.decode('utf-8', errors='replace'))
+            }
+
+        except asyncio.TimeoutError:
+            try:
+                process.kill()
+                await process.communicate()
+            except Exception:
+                pass
+            file_log.warning(f"Command timed out after {timeout}s: {' '.join(command)}")
+            return {
+                "success": False,
+                "returncode": -1,
+                "stdout": "",
+                "stderr": f"Command timed out after {timeout}s",
+                "command": ' '.join(command),
+                "error_type": "timeout",
+                "raw_error": f"Timed out after {timeout}s"
             }
 
         except FileNotFoundError as e:

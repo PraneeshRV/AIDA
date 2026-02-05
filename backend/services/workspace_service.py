@@ -19,12 +19,14 @@ class WorkspaceService:
     def __init__(self):
         self.os_name = platform.system()
 
-    async def _run_command(self, command: list[str]) -> Dict[str, Any]:
+    async def _run_command(self, command: list[str], timeout: float = 10.0) -> Dict[str, Any]:
         """
         Execute a system command asynchronously
 
         Args:
             command: Command and arguments as list
+            timeout: Max seconds to wait for the command (default 10s).
+                     Prevents hangs when docker socket is slow or unresponsive.
 
         Returns:
             Dict with stdout, stderr, and returncode
@@ -36,12 +38,28 @@ class WorkspaceService:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await process.communicate()
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
 
             return {
                 "stdout": stdout.decode('utf-8').strip() if stdout else "",
                 "stderr": stderr.decode('utf-8').strip() if stderr else "",
                 "returncode": process.returncode
+            }
+        except asyncio.TimeoutError:
+            # Kill the hanging process so it doesn't linger
+            try:
+                process.kill()
+                await process.communicate()
+            except Exception:
+                pass
+            logger.warning("Command timed out", command=" ".join(command), timeout=timeout)
+            return {
+                "stdout": "",
+                "stderr": f"Command timed out after {timeout}s",
+                "returncode": -1
             }
         except Exception as e:
             logger.error("Failed to run command", command=" ".join(command), error=str(e))
