@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     # Database URL (will be constructed in validator if not provided)
     DATABASE_URL: Optional[str] = None
 
-    # CORS - Will be parsed from comma-separated string
-    BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    # CORS - Allow all origins for development (use specific origins in production)
+    # For production, set BACKEND_CORS_ORIGINS in .env to specific origins
+    BACKEND_CORS_ORIGINS: str = "*"
 
     # Container Configuration (Exegol pentesting container)
     CONTAINER_WORKSPACE_BASE: str = "/workspace"
@@ -73,6 +74,9 @@ class Settings(BaseSettings):
         """Parse CORS origins from comma-separated string to list"""
         if isinstance(v, list):
             return v
+        # Handle wildcard
+        if v.strip() == "*":
+            return ["*"]
         return [origin.strip() for origin in v.split(",") if origin.strip()]
 
     @field_validator('LOG_FILE_ENABLED', 'LOG_CONSOLE_ENABLED', 'DEBUG', mode='before')
