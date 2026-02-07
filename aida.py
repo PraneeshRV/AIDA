@@ -304,13 +304,14 @@ def show_assessment_not_found(assessment_name: str, backend_url: str):
 @click.option("-a", "--assessment", help="Load specific assessment")
 @click.option("-m", "--model", default=None, help="Model to use (optional, Claude Code default if not specified)")
 @click.option("--permission-mode", default=None, help=f"Permission mode (default: {DEFAULT_PERMISSION})")
+@click.option("--preprompt", type=click.Path(exists=False), help="Path to custom preprompt file (default: Docs/PrePrompt.txt)")
 @click.option("--base-url", help="Custom API base URL")
 @click.option("--api-key", help="API authentication token")
 @click.option("--no-mcp", is_flag=True, help="Disable MCP server")
 @click.option("--debug", is_flag=True, help="Enable debug mode")
 @click.option("-q", "--quiet", is_flag=True, help="Quiet mode (minimal output)")
 @click.argument("prompt", nargs=-1)
-def main(assessment, model, permission_mode, base_url, api_key, no_mcp, debug, quiet, prompt):
+def main(assessment, model, permission_mode, preprompt, base_url, api_key, no_mcp, debug, quiet, prompt):
     """AIDA CLI Launcher - AI-Driven Security Assessment"""
     
     # Clear terminal for clean start
@@ -405,12 +406,45 @@ def main(assessment, model, permission_mode, base_url, api_key, no_mcp, debug, q
             console.print("  → [cyan]docker-compose restart backend[/cyan]\n")
             sys.exit(1)
     
-    # Load PrePrompt
-    if not PREPROMPT_FILE.exists():
-        console.print(f"[red]✗ PrePrompt not found: {PREPROMPT_FILE}[/red]\n")
-        sys.exit(1)
-    
-    preprompt = PREPROMPT_FILE.read_text()
+    # Load PrePrompt (custom or default)
+    if preprompt:
+        # Custom preprompt specified
+        custom_preprompt_path = Path(preprompt).expanduser().resolve()
+        
+        if not custom_preprompt_path.exists():
+            console.print(f"[red]✗ Custom preprompt file not found: {custom_preprompt_path}[/red]\n")
+            console.print("[yellow]Troubleshooting:[/yellow]")
+            console.print(f"  • Check the path is correct")
+            console.print(f"  • Use absolute path or path relative to current directory")
+            console.print(f"  • Default preprompt: {PREPROMPT_FILE}\n")
+            sys.exit(1)
+        
+        if not custom_preprompt_path.is_file():
+            console.print(f"[red]✗ Path is not a file: {custom_preprompt_path}[/red]\n")
+            sys.exit(1)
+        
+        try:
+            preprompt_content = custom_preprompt_path.read_text()
+            if not quiet:
+                console.print(f"[green]✓ Using custom preprompt:[/green] [cyan]{custom_preprompt_path.name}[/cyan]")
+                console.print(f"[dim]  Path: {custom_preprompt_path}[/dim]\n")
+        except Exception as e:
+            console.print(f"[red]✗ Failed to read preprompt file: {e}[/red]\n")
+            sys.exit(1)
+    else:
+        # Use default preprompt
+        if not PREPROMPT_FILE.exists():
+            console.print(f"[red]✗ Default preprompt not found: {PREPROMPT_FILE}[/red]\n")
+            console.print("[yellow]Create the file or specify a custom preprompt with --preprompt[/yellow]\n")
+            sys.exit(1)
+        
+        try:
+            preprompt_content = PREPROMPT_FILE.read_text()
+            if not quiet and debug:
+                console.print(f"[dim]✓ Using default preprompt: {PREPROMPT_FILE.name}[/dim]\n")
+        except Exception as e:
+            console.print(f"[red]✗ Failed to read default preprompt: {e}[/red]\n")
+            sys.exit(1)
     
     # MCP Configuration
     if not no_mcp:
@@ -442,7 +476,7 @@ def main(assessment, model, permission_mode, base_url, api_key, no_mcp, debug, q
             console.print(f"[dim]✓ Workspace: {workspace_path}[/dim]\n")
         
         # Enhance preprompt with minimal assessment context
-        preprompt += f"""
+        preprompt_content += f"""
 
 ## **Assessment Loaded**
 
@@ -454,7 +488,7 @@ The assessment workspace is ready. Use your standard tools to work with files an
     # Build Claude Code command
     claude_args = [
         "claude",
-        "--system-prompt", preprompt,
+        "--system-prompt", preprompt_content,
         "--permission-mode", permission_mode,
     ]
     
