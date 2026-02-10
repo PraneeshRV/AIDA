@@ -314,3 +314,190 @@ async def get_workspace_tree(
     except Exception as e:
         logger.error("Failed to generate workspace tree", assessment_id=assessment_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{assessment_id}/markdown/files")
+async def list_markdown_files(
+    assessment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    List all markdown (.md) files in the assessment workspace
+    
+    Returns:
+        List of markdown files with metadata (filename, path, size, modified)
+    """
+    logger.info("Listing markdown files", assessment_id=assessment_id)
+    
+    try:
+        # Get assessment
+        assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+        
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        
+        if not assessment.workspace_path:
+            return []
+        
+        # Get container name
+        container_name = assessment.container_name
+        
+        if not container_name:
+            container_setting = db.query(PlatformSettings).filter(
+                PlatformSettings.key == "container_name"
+            ).first()
+            container_name = container_setting.value if container_setting else settings.DEFAULT_CONTAINER_NAME
+        
+        # Search for .md files in all workspace folders
+        workspace_folders = ['recon', 'exploits', 'loot', 'notes', 'scripts', 'context']
+        markdown_files = []
+        
+        container_service = ContainerService()
+        container_service.current_container = container_name
+        
+        for folder in workspace_folders:
+            folder_path = f"{assessment.workspace_path}/{folder}"
+            
+            # CRITICAL FIX: Use -maxdepth to avoid recursing into subdirectories of other assessments
+            # and verify the file actually belongs to THIS workspace
+            find_cmd = f"find {folder_path} -maxdepth 2 -name '*.md' -type f 2>/dev/null || true"
+            result = await container_service.execute_container_command(find_cmd)
+            
+            if result.get('success') and result.get('stdout'):
+                files = result['stdout'].strip().split('\n')
+                
+                for file_path in files:
+                    if not file_path or file_path.isspace():
+                        continue
+                    
+                    # CRITICAL: Verify file is actually from THIS assessment workspace
+                    if not file_path.startswith(assessment.workspace_path):
+                        logger.warning(f"Skipping file outside workspace: {file_path}")
+                        continue
+                    
+                    # Get file metadata
+                    stat_cmd = f"stat -c '%s %Y' {file_path} 2>/dev/null || stat -f '%z %m' {file_path} 2>/dev/null"
+                    stat_result = await container_service.execute_container_command(stat_cmd)
+                    
+                    size = 0
+                    modified = None
+                    
+                    if stat_result.get('success') and stat_result.get('stdout'):
+                        parts = stat_result['stdout'].strip().split()
+                        if len(parts) >= 2:
+                            size = int(parts[0])
+                            modified = int(parts[1])
+                    
+                    # Compute relative path from workspace
+                    relative_path = file_path.replace(assessment.workspace_path + '/', '')
+                    filename = os.path.basename(file_path)
+                    
+                    markdown_files.append({
+                        "filename": filename,
+                        "path": relative_path,
+                        "size": size,
+                        "size_human": f"{size / 1024:.2f}KB" if size < 1024 * 1024 else f"{size / 1024 / 1024:.2f}MB",
+                        "modified": modified,
+                        "folder": folder
+                    })
+        
+        logger.info("Listed markdown files", assessment_id=assessment_id, count=len(markdown_files))
+        
+        return markdown_files
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to list markdown files", assessment_id=assessment_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{assessment_id}/markdown/content")
+async def get_markdown_content(
+    assessment_id: int,
+    path: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get content of a specific markdown file
+    
+    Args:
+        assessment_id: ID of the assessment
+        path: Relative path to the markdown file from workspace root
+        
+    Returns:
+        Dict with filename, content, and path
+    """
+    logger.info("Getting markdown content", assessment_id=assessment_id, path=path)
+    
+    try:
+        # Validate path (prevent directory traversal)
+        if '..' in path or path.startswith('/'):
+            raise HTTPException(status_code=400, detail="Invalid file path")
+        
+        if not path.endswith('.md'):
+            raise HTTPException(status_code=400, detail="Only markdown (.md) files are allowed")
+        
+        # Get assessment
+        assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+        
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        
+        if not assessment.workspace_path:
+            raise HTTPException(status_code=400, detail="Assessment has no workspace")
+        
+        # Get container name
+        container_name = assessment.container_name
+        
+        if not container_name:
+            container_setting = db.query(PlatformSettings).filter(
+                PlatformSettings.key == "container_name"
+            ).first()
+            container_name = container_setting.value if container_setting else settings.DEFAULT_CONTAINER_NAME
+        
+        # Construct full path
+        full_path = f"{assessment.workspace_path}/{path}"
+        
+        # Read file content
+        container_service = ContainerService()
+        container_service.current_container = container_name
+        
+        # Check if file exists
+        check_cmd = f"test -f {full_path} && echo 'exists'"
+        check_result = await container_service.execute_container_command(check_cmd)
+        
+        if not check_result.get('success') or 'exists' not in check_result.get('stdout', ''):
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
+        
+        # Read file
+        read_cmd = f"cat {full_path}"
+        result = await container_service.execute_container_command(read_cmd)
+        
+        if not result.get('success'):
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to read file: {result.get('stderr', 'Unknown error')}"
+            )
+        
+        content = result.get('stdout', '')
+        filename = os.path.basename(path)
+        
+        logger.info(
+            "Retrieved markdown content",
+            assessment_id=assessment_id,
+            filename=filename,
+            size=len(content)
+        )
+        
+        return {
+            "filename": filename,
+            "path": path,
+            "content": content
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get markdown content", assessment_id=assessment_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

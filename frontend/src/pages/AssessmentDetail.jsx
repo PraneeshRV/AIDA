@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Clock, User, Target, Globe, Server, Shield, ArrowLeft, AlertTriangle, Info, Eye, TrendingUp, Filter, FolderOpen, RefreshCw } from '../components/icons';
+import { Clock, User, Target, Globe, Server, Shield, ArrowLeft, AlertTriangle, Info, Eye, TrendingUp, Filter, FolderOpen, RefreshCw, FileText } from '../components/icons';
 import apiClient from '../services/api';
 import workspaceService from '../services/workspaceService';
 import EditableField from '../components/common/EditableField';
@@ -13,6 +13,7 @@ import ImportScanModal from '../components/assessment/ImportScanModal';
 import CredentialsManager from '../components/assessment/CredentialsManager';
 import ContextDocumentsPanel from '../components/assessment/ContextDocumentsPanel';
 import ChangeContainerModal from '../components/workspace/ChangeContainerModal';
+import MarkdownDocumentsModal from '../components/assessment/MarkdownDocumentsModal';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const AssessmentDetail = () => {
@@ -29,6 +30,7 @@ const AssessmentDetail = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [openingWorkspace, setOpeningWorkspace] = useState(false);
   const [showChangeContainerModal, setShowChangeContainerModal] = useState(false);
+  const [showMarkdownModal, setShowMarkdownModal] = useState(false);
 
   // WebSocket connection for real-time updates
   const { subscribe, isConnected } = useWebSocket(id);
@@ -383,6 +385,14 @@ const AssessmentDetail = () => {
                 <span>Workspace</span>
               </>
             )}
+          </button>
+          <button
+            onClick={() => setShowMarkdownModal(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 bg-neutral-50 dark:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-500 rounded-md transition-colors"
+            title="View markdown documents"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Docs</span>
           </button>
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${assessment.status === 'in_progress'
             ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
@@ -871,6 +881,13 @@ const AssessmentDetail = () => {
           <CommandHistoryRefactored commands={commands} />
         </div>
       </div>
+      {/* Markdown Documents Modal */}
+      {showMarkdownModal && (
+        <MarkdownDocumentsModal
+          assessmentId={parseInt(id)}
+          onClose={() => setShowMarkdownModal(false)}
+        />
+      )}
     </div>
   );
 };
