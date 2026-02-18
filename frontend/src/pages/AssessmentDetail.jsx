@@ -137,7 +137,7 @@ const AssessmentDetail = () => {
         apiClient.get(`/assessments/${id}/recon/types`),
         apiClient.get(`/assessments/${id}/cards`),
         apiClient.get(`/assessments/${id}/sections`),
-        apiClient.get(`/assessments/${id}/commands?limit=100`),
+        apiClient.get(`/assessments/${id}/commands?limit=10000`),
       ]);
 
       setAssessment(assessmentRes.data);

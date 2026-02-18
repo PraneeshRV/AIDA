@@ -24,7 +24,7 @@ global_router = APIRouter(prefix="/commands", tags=["global-commands"])
 @router.get("", response_model=List[CommandResponse])
 async def list_commands(
     assessment_id: int,
-    limit: int = 50,
+    limit: int = 10000,
     db: Session = Depends(get_db)
 ):
     """Get command history for an assessment"""
