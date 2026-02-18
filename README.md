@@ -107,15 +107,23 @@ That's it. The platform is running.
 
 Now hook up your AI client.
 
-**Recommended: Claude Code CLI**
+**Recommended: AIDA CLI (Claude Code or Kimi)**
 
-The easiest way to get started is using the AIDA CLI wrapper with Claude Code:
+The easiest way to get started is using the AIDA CLI wrapper, which supports both Claude Code and Kimi CLI:
 
 ```bash
+# Auto-detect available CLI (Claude or Kimi)
 python3 aida.py --assessment "test"
+
+# Force a specific CLI
+python3 aida.py --assessment "test" --cli claude
+python3 aida.py --assessment "test" --cli kimi
+
+# Auto-approve all actions
+python3 aida.py --assessment "test" --yes
 ```
 
-You can also use your own API keys.
+You can also use your own API keys (Claude only).
 
 **Alternative: Import MCP tools into your AI client**
 
@@ -156,14 +164,17 @@ Here's Claude Desktop as an example:
 
 AIDA uses the **Model Context Protocol (MCP)** - an open standard. If your AI client supports MCP, it works with AIDA.
 
-| AI Client           | Status  | Setup Guide |
-|---------------------|---------|-------------|
-| **Claude Code**     | Recommended | [→ Guide](Docs/INSTALLATION.md#claude-code) |
-| **External API**    |  Recommended  | [→ Guide](Docs/INSTALLATION.md#vertex-ai-external-api) |
-| **Claude Desktop**  | Works   | [→ Guide](Docs/INSTALLATION.md#other-ai-clients-manual-mcp-import) |
-| **ChatGPT Desktop** | Works | [→ Guide](Docs/INSTALLATION.md#chatgpt) |
-| **Gemini CLI**      |  Works  | [→ Guide](Docs/INSTALLATION.md#gemini-cli) |
-| **Antigravity**     |  Works  | [→ Guide](Docs/INSTALLATION.md#antigravity) |
+| AI Client           | Status      | Setup |
+|---------------------|-------------|-------|
+| **Claude Code**     | Recommended | Via `aida.py` (automatic) |
+| **Kimi CLI**        | Recommended | Via `aida.py` (automatic) |
+| **External API**    | Recommended | Via `aida.py --base-url` |
+| **Claude Desktop**  | Works       | Manual MCP import |
+| **ChatGPT Desktop** | Works       | Manual MCP import |
+| **Gemini CLI**      | Works       | Manual MCP import |
+| **Antigravity**     | Works       | Manual MCP import |
+
+> **Full setup for all AI clients** → [INSTALLATION.md](Docs/INSTALLATION.md)
 
 
 ---

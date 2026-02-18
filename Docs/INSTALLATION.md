@@ -17,7 +17,7 @@ Before we start, make sure you have:
 
 Also needed:
 - **Exegol** container ([Install guide](https://docs.exegol.com/first-install/))
-- **An AI client** that supports MCP (Claude, Gemini, Antigravity...)
+- **An AI client** that supports MCP — Claude Code or Kimi CLI recommended (see Step 5)
 
 ---
 
@@ -79,12 +79,33 @@ Now you need to hook up AIDA to your AI assistant via MCP.
 ### Which AI Client Should I Use?
 
 | AI Client | Recommendation | Setup Method |
-|-----------|-----------|--------------|
-| **Claude Code** | recommended | Use `aida.py` CLI (automatic) |
-| **Vertex AI** | Recommended | Use `aida.py` with flags |
+|-----------|----------------|--------------|
+| **Claude Code** | Recommended | Use `aida.py` CLI (automatic) |
+| **Kimi CLI** | Recommended | Use `aida.py` CLI (automatic) |
+| **Vertex AI / External API** | Recommended | Use `aida.py` with flags |
 | **Antigravity** | Works | Manual MCP import |
 | **Gemini CLI** | Works | Manual MCP import |
 | **Claude Desktop** | Works | Manual MCP import |
+
+---
+
+## AIDA CLI — Claude Code & Kimi
+
+The `aida.py` CLI is the recommended way to launch AIDA. It **auto-detects** which AI client you have installed (Claude Code or Kimi CLI) and configures everything automatically — MCP server, workspace, preprompt.
+
+### Common Options
+
+| Flag | Description |
+|------|-------------|
+| `-a`, `--assessment NAME` | Load a specific assessment directly |
+| `--cli claude\|kimi\|auto` | Force a specific CLI (default: auto-detect) |
+| `-m`, `--model MODEL` | Override the model used |
+| `--preprompt FILE` | Use a custom preprompt file |
+| `-y`, `--yes` | Auto-approve all AI actions |
+| `--no-mcp` | Disable MCP server (for testing) |
+| `--debug` | Enable debug output |
+| `-q`, `--quiet` | Minimal startup output |
+| `PROMPT...` | Pass an initial prompt directly |
 
 ---
 
@@ -96,17 +117,28 @@ Now you need to hook up AIDA to your AI assistant via MCP.
 
 You MUST have Claude Code installed and logged in:
 
+```bash
+# Install Claude Code
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
 ### Launch AIDA
 
 ```bash
-# Interactive - select assessment from list
+# Interactive — select assessment from list
 python3 aida.py
 
 # Direct launch with assessment name
 python3 aida.py --assessment "MyTarget"
 
 # With custom model
-python3 aida.py --assessment "MyTarget" --model claude-opus-4-5
+python3 aida.py --assessment "MyTarget" --model claude-opus-4-6
+
+# Force Claude if both CLIs are installed
+python3 aida.py --assessment "MyTarget" --cli claude
+
+# Auto-approve all actions (no confirmation prompts)
+python3 aida.py --assessment "MyTarget" --yes
 ```
 
 The CLI automatically:
@@ -119,24 +151,64 @@ You can verify if the MCP server is correctly loaded using `/mcp`
 
 <img src="../assets/doc/mcp.png" alt="MCP Server" width="33%" />
 
-
-
 **That's it. You're ready.**
 
 ---
 
-## Vertex AI (External API)
+## Kimi CLI
 
-If you're using Vertex AI or another external API:
+**Kimi CLI** is fully supported as an alternative to Claude Code. The AIDA CLI handles the full setup automatically.
+
+### Prerequisites
+
+Install Kimi CLI:
+
+```bash
+pip install kimi-cli
+# or
+uv tool install kimi-cli
+```
+
+Then log in and configure Kimi CLI according to its documentation.
+
+### Launch AIDA with Kimi
+
+```bash
+# Auto-detect (picks Kimi if Claude isn't installed)
+python3 aida.py --assessment "MyTarget"
+
+# Force Kimi explicitly
+python3 aida.py --assessment "MyTarget" --cli kimi
+
+# With a specific model
+python3 aida.py --assessment "MyTarget" --cli kimi --model kimi-k2
+
+# Yolo mode — auto-approve everything
+python3 aida.py --assessment "MyTarget" --cli kimi --yes
+```
+
+The CLI automatically:
+- Generates a Kimi agent YAML file (`.aida/kimi-agent.yaml`)
+- Injects the AIDA system prompt with assessment context
+- Configures the MCP server for Kimi
+- Sets the working directory to the assessment workspace
+
+> **Note:** `--yes` maps to `--yolo` in Kimi CLI, which auto-approves all tool calls. Use with caution.
+
+---
+
+## Vertex AI / External API
+
+If you're using Vertex AI or another external API (Claude only):
 
 ```bash
 python3 aida.py --assessment "MyTarget" \
   --base-url "https://YOUR-VERTEX-ENDPOINT" \
   --api-key "YOUR-API-KEY" \
-  --model claude-sonnet-4-5
+  --model claude-sonnet-4-5-20250929
 ```
 
-Same benefits as Claude Code, but with your own API.
+Same benefits as Claude Code, but routing through your own API endpoint.
 
 ---
 
@@ -150,7 +222,9 @@ For Antigravity, Gemini CLI, Claude Desktop, or ChatGPT, you need to manually co
 2. Copy the preprompt from `Docs/PrePrompt.txt`
 3. Paste it into your AI client when starting an assessment
 
-> Antigravity works great if you select Claude. Gemini is OK. Other AI clients should work too - you can import MCP config anywhere you want.
+> Antigravity works great if you select Claude. Gemini is OK. Any MCP-compatible client should work.
+>
+> **Prefer Claude Code or Kimi?** Use `aida.py` instead — it handles all of this automatically.
 
 ### Config Paths
 
@@ -216,6 +290,36 @@ TODO
 - [**User Guide**](USER_GUIDE.md) - Learn how to use the platform
 - [**MCP Tools Reference**](MCP_TOOLS.md) - All available tools for your AI
 - [**Architecture**](ARCHITECTURE.md) - Technical deep dive
+
+---
+
+## CLI Quick Reference
+
+```bash
+# List available assessments and pick one interactively
+python3 aida.py
+
+# Load a specific assessment (auto-detect CLI)
+python3 aida.py -a "MyTarget"
+
+# Force Claude Code
+python3 aida.py -a "MyTarget" --cli claude
+
+# Force Kimi CLI
+python3 aida.py -a "MyTarget" --cli kimi
+
+# Auto-approve all actions
+python3 aida.py -a "MyTarget" --yes
+
+# Custom preprompt
+python3 aida.py -a "MyTarget" --preprompt /path/to/custom-preprompt.txt
+
+# External API (Claude only)
+python3 aida.py -a "MyTarget" --base-url "https://..." --api-key "..." --model claude-sonnet-4-5-20250929
+
+# Pass an initial prompt
+python3 aida.py -a "MyTarget" "Start from phase 1 and run reconnaissance"
+```
 
 ---
 

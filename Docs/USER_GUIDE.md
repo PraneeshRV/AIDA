@@ -154,7 +154,18 @@ For infrastructure assessments, it's recommended to run long scans beforehand an
 
 ### Connect Your AI
 
-Tell your AI assistant (Claude, Gemini, etc.) which assessment to work on:
+Launch AIDA with your preferred AI client:
+
+```bash
+# Auto-detect Claude Code or Kimi CLI
+python3 aida.py --assessment "Acme Corp Pentest"
+
+# Or force a specific CLI
+python3 aida.py --assessment "Acme Corp Pentest" --cli claude
+python3 aida.py --assessment "Acme Corp Pentest" --cli kimi
+```
+
+The CLI injects the preprompt and loads the assessment context automatically. Then tell the AI:
 
 ```
 Load assessment 'Acme Corp Pentest'
@@ -400,7 +411,7 @@ docker exec -it exegol-aida /bin/zsh
 
 | Document | Purpose |
 |----------|---------|
-| [**Installation Guide**](INSTALLATION.md) | Setup AIDA with your AI client |
+| [**Installation Guide**](INSTALLATION.md) | Setup AIDA — Claude Code, Kimi, and other clients |
 | [**MCP Tools Reference**](MCP_TOOLS.md) | Complete list of AI-available tools |
 | [**Architecture**](ARCHITECTURE.md) | Technical deep dive into AIDA |
 | [**PrePrompt**](PrePrompt.txt) | AI behavior guidelines |
