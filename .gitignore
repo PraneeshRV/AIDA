@@ -60,6 +60,7 @@ stop-legacy.sh
 
 # Docker
 docker-compose.override.yml
+switch-db.sh
 
 # Artifacts directory (Gemini/Antigravity)
 .gemini/
