@@ -2,9 +2,39 @@
 MCP Tool Handlers - Refactored handlers for all MCP tools
 Handles: load_assessment, add_*, list_*, update_*, execute, pentesting tools
 """
-from typing import List
+from typing import List, Optional, Tuple
 from mcp.types import TextContent
 from scan_parsers import parse_scan_output
+
+
+def _calculate_cvss4_score(vector: str) -> Tuple[Optional[float], Optional[str]]:
+    """
+    Calculate CVSS 4.0 score and severity from a vector string.
+    Returns (score, severity) or (None, None) on error.
+    Uses the cvss library if available, otherwise falls back to None.
+    """
+    try:
+        from cvss import CVSS4
+        c = CVSS4(vector)
+        score = float(c.base_score)
+        severity = _score_to_severity(score)
+        return score, severity
+    except Exception:
+        pass
+    return None, None
+
+
+def _score_to_severity(score: float) -> str:
+    """Map CVSS 4.0 numeric score to severity label (FIRST standard thresholds)."""
+    if score >= 9.0:
+        return "CRITICAL"
+    elif score >= 7.0:
+        return "HIGH"
+    elif score >= 4.0:
+        return "MEDIUM"
+    elif score > 0.0:
+        return "LOW"
+    return "INFO"
 
 
 async def handle_tool_call(name: str, arguments: dict, mcp_service) -> List[TextContent]:
@@ -210,6 +240,10 @@ async def _handle_load_assessment(arguments: dict, mcp_service) -> List[TextCont
                             response += f"- **Target:** {finding['target_service']}\n"
                         if finding.get('status'):
                             response += f"- **Status:** {finding['status']}\n"
+                        if finding.get('cvss_score') is not None:
+                            response += f"- **CVSS Score:** {finding['cvss_score']}\n"
+                        if finding.get('cvss_vector'):
+                            response += f"- **CVSS Vector:** `{finding['cvss_vector']}`\n"
                         if finding.get('section_number'):
                             response += f"- **Section:** {finding['section_number']}\n"
                         if finding.get('technical_analysis'):
@@ -344,16 +378,29 @@ async def _handle_add_card(arguments: dict, mcp_service) -> List[TextContent]:
 
     # Add all optional fields if provided (don't filter by type - backend accepts all)
     optional_fields = [
-        "target_service", "severity", "status", 
+        "target_service", "severity", "status",
         "technical_analysis", "proof", "notes", "context"
     ]
     for field in optional_fields:
         if field in arguments and arguments[field] is not None:
             card_data[field] = arguments[field]
 
-    # Validate severity for findings
+    # Handle CVSS 4.0 vector: calculate score and derive severity automatically
+    cvss_vector = arguments.get("cvss_vector")
+    if cvss_vector:
+        score, derived_severity = _calculate_cvss4_score(cvss_vector)
+        card_data["cvss_vector"] = cvss_vector
+        if score is not None:
+            card_data["cvss_score"] = score
+            card_data["severity"] = derived_severity  # Override manual severity
+        else:
+            # Library not available or invalid vector — store vector, keep manual severity if provided
+            import logging
+            logging.getLogger("aida-mcp").warning(f"Could not calculate CVSS score for vector: {cvss_vector}")
+
+    # Validate that findings have either cvss_vector or severity
     if card_type == "finding" and "severity" not in card_data:
-        return [TextContent(type="text", text="severity is required for findings")]
+        return [TextContent(type="text", text="findings require either cvss_vector or severity")]
 
     # Set default status for findings
     if card_type == "finding" and "status" not in card_data:
@@ -369,9 +416,13 @@ async def _handle_add_card(arguments: dict, mcp_service) -> List[TextContent]:
 
     # Format response based on type
     if card_type == "finding":
+        cvss_info = ""
+        if card_data.get("cvss_score") is not None:
+            cvss_info = f" — CVSS {card_data['cvss_score']}"
+        severity_label = card_data.get("severity", "N/A")
         return [TextContent(
             type="text",
-            text=f"Finding added: {title} ({arguments.get('severity', 'N/A')}) [ID: {card_id}]"
+            text=f"Finding added: {title} ({severity_label}{cvss_info}) [ID: {card_id}]"
         )]
     elif card_type == "observation":
         return [TextContent(
@@ -456,10 +507,22 @@ async def _handle_update_card(arguments: dict, mcp_service) -> List[TextContent]
 
     # Build update payload (only include provided fields)
     update_data = {}
-    for field in ["title", "target_service", "severity", "status", 
+    for field in ["title", "target_service", "severity", "status",
                   "technical_analysis", "proof", "notes", "context"]:
         if field in arguments:
             update_data[field] = arguments[field]
+
+    # Handle CVSS 4.0 vector update: recalculate score and severity
+    cvss_vector = arguments.get("cvss_vector")
+    if cvss_vector:
+        score, derived_severity = _calculate_cvss4_score(cvss_vector)
+        update_data["cvss_vector"] = cvss_vector
+        if score is not None:
+            update_data["cvss_score"] = score
+            update_data["severity"] = derived_severity
+        else:
+            import logging
+            logging.getLogger("aida-mcp").warning(f"Could not calculate CVSS score for vector: {cvss_vector}")
 
     if not update_data:
         return [TextContent(type="text", text="No fields to update provided.")]

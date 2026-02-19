@@ -1,7 +1,7 @@
 """
 Card SQLAlchemy model (Finding/Observation/Info)
 """
-from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, TIMESTAMP, Float, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
@@ -21,6 +21,10 @@ class Card(Base):
     # Finding specific
     status = Column(String(50))  # confirmed, potential, untested
     severity = Column(String(20))  # CRITICAL, HIGH, MEDIUM, LOW, INFO
+
+    # CVSS 4.0
+    cvss_vector = Column(String(255))  # e.g. "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+    cvss_score = Column(Float)          # e.g. 9.3
 
     # Common fields
     technical_analysis = Column(Text)

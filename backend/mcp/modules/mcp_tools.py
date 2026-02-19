@@ -76,10 +76,14 @@ def get_tool_definitions() -> List[Tool]:
                         "description": "Target or service affected"
                     },
                     # Finding-specific fields
+                    "cvss_vector": {
+                        "type": "string",
+                        "description": "CVSS 4.0 vector string (preferred for findings). Example: CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N. Severity will be automatically calculated from the score."
+                    },
                     "severity": {
                         "type": "string",
                         "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
-                        "description": "Severity level (required for findings)"
+                        "description": "Severity level for findings. Use cvss_vector instead when possible — severity will be derived automatically. Use this only when CVSS cannot be assessed."
                     },
                     "status": {
                         "type": "string",
@@ -151,10 +155,14 @@ def get_tool_definitions() -> List[Tool]:
                         "type": "string",
                         "description": "Updated target/service"
                     },
+                    "cvss_vector": {
+                        "type": "string",
+                        "description": "Updated CVSS 4.0 vector string. Severity will be automatically recalculated from the new score."
+                    },
                     "severity": {
                         "type": "string",
                         "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"],
-                        "description": "New severity level (findings only)"
+                        "description": "New severity level (findings only). Prefer cvss_vector when possible."
                     },
                     "status": {
                         "type": "string",

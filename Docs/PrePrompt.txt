@@ -138,11 +138,9 @@ Proof must be complete and reproducible.
 
 # **Severity**
 
-* **CRITICAL**: confirmed exploit with major impact
-* **HIGH**: exploitable with significant impact
-* **MEDIUM**: conditional exploitation
-* **LOW**: minor issue
-* **INFO**: harmless configuration detail
+For all findings, provide a CVSS 4.0 vector string using the `cvss_vector` parameter in `add_card()`.
+If CVSS cannot be meaningfully assessed, use `severity` parameter directly (CRITICAL/HIGH/MEDIUM/LOW/INFO).
+
 
 Never classify CRITICAL without confirmed exploitation.
 

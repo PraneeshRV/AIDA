@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Shield, Eye, EyeOff, Info, AlertTriangle, Edit2, Trash2, Plus } from '../icons';
 import UnifiedModal from '../common/UnifiedModal';
+import CvssCalculator from './CvssCalculator';
 import apiClient from '../../services/api';
 
 const CardsTable = ({ cards, assessmentId, onUpdate }) => {
@@ -19,7 +20,10 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
     technical_analysis: '',
     proof: '',
     notes: '',
-    context: ''
+    context: '',
+    cvss_vector: null,
+    cvss_score: null,
+    cvss_mode: 'cvss',  // 'cvss' | 'manual'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -89,7 +93,10 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
       technical_analysis: '',
       proof: '',
       notes: '',
-      context: ''
+      context: '',
+      cvss_vector: null,
+      cvss_score: null,
+      cvss_mode: 'cvss',
     });
     setShowModal(true);
   };
@@ -107,7 +114,10 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
       technical_analysis: card.technical_analysis || '',
       proof: card.proof || '',
       notes: card.notes || '',
-      context: card.context || ''
+      context: card.context || '',
+      cvss_vector: card.cvss_vector || null,
+      cvss_score: card.cvss_score || null,
+      cvss_mode: card.cvss_vector ? 'cvss' : 'manual',
     });
     setShowModal(true);
   };
@@ -122,17 +132,22 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
     try {
       setIsSubmitting(true);
 
+      const isFinding = formData.card_type === 'finding';
+      const useCvss = isFinding && formData.cvss_mode === 'cvss' && formData.cvss_vector;
+
       const payload = {
         card_type: formData.card_type,
         title: formData.title.trim(),
         target_service: formData.target_service || null,
-        severity: formData.card_type === 'finding' ? formData.severity : null,
-        status: formData.status || null,  // Send status for all card types (supports false_positive)
+        severity: isFinding ? formData.severity : null,
+        status: formData.status || null,
         section_number: formData.section_number || null,
         technical_analysis: formData.technical_analysis || null,
         proof: formData.proof || null,
         notes: formData.notes || null,
-        context: formData.context || null
+        context: formData.context || null,
+        cvss_vector: useCvss ? formData.cvss_vector : null,
+        cvss_score: useCvss ? formData.cvss_score : null,
       };
 
       if (editingCard) {
@@ -224,10 +239,13 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
                       {getCardIcon(cardType, severity)}
                     </div>
 
-                    {/* Severity Badge */}
+                    {/* Severity Badge + CVSS Score */}
                     {cardType === 'finding' && (
                       <span className={`px-2 py-1 text-xs font-medium rounded border ${getSeverityColor(severity)}`}>
                         {severity}
+                        {card.cvss_score != null && (
+                          <span className="ml-1 font-mono opacity-80">{card.cvss_score.toFixed(1)}</span>
+                        )}
                       </span>
                     )}
 
@@ -344,6 +362,25 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
                       </div>
                     )}
 
+                    {/* CVSS Details */}
+                    {(card.cvss_score != null || card.cvss_vector) && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">CVSS 4.0</h4>
+                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                          {card.cvss_score != null && (
+                            <span className="font-mono font-semibold text-neutral-800 dark:text-neutral-200">
+                              Score: {card.cvss_score.toFixed(1)}
+                            </span>
+                          )}
+                          {card.cvss_vector && (
+                            <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400 break-all">
+                              {card.cvss_vector}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Metadata */}
                     <div className="flex items-center gap-4 text-xs text-neutral-500 dark:text-neutral-400 pt-2 border-t border-neutral-200 dark:border-neutral-700">
                       <span>Created: {new Date(card.created_at).toLocaleDateString()}</span>
@@ -419,23 +456,71 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
 
           {/* Severity & Status (only for findings) */}
           {formData.card_type === 'finding' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                  Severity
-                </label>
-                <select
-                  value={formData.severity}
-                  onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
-                  className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <div className="space-y-4">
+              {/* CVSS / Manual toggle */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, cvss_mode: 'cvss' })}
+                  className={`px-3 py-1.5 text-xs rounded-l-lg border transition-colors ${
+                    formData.cvss_mode === 'cvss'
+                      ? 'bg-primary-600 dark:bg-primary-700 text-white border-primary-600'
+                      : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-300 dark:border-neutral-700 hover:border-primary-400'
+                  }`}
                 >
-                  <option value="CRITICAL">Critical</option>
-                  <option value="HIGH">High</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="LOW">Low</option>
-                  <option value="INFO">Info</option>
-                </select>
+                  CVSS 4.0
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, cvss_mode: 'manual' })}
+                  className={`px-3 py-1.5 text-xs rounded-r-lg border-t border-b border-r transition-colors ${
+                    formData.cvss_mode === 'manual'
+                      ? 'bg-primary-600 dark:bg-primary-700 text-white border-primary-600'
+                      : 'bg-white dark:bg-neutral-900 text-neutral-600 dark:text-neutral-400 border-neutral-300 dark:border-neutral-700 hover:border-primary-400'
+                  }`}
+                >
+                  Manual Severity
+                </button>
               </div>
+
+              {/* CVSS Calculator */}
+              {formData.cvss_mode === 'cvss' && (
+                <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-neutral-50/50 dark:bg-neutral-800/50">
+                  <CvssCalculator
+                    initialVector={formData.cvss_vector}
+                    onChange={(vector, score, severity) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        cvss_vector: vector,
+                        cvss_score: score,
+                        severity: severity || prev.severity,
+                      }));
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Manual severity fallback */}
+              {formData.cvss_mode === 'manual' && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Severity
+                  </label>
+                  <select
+                    value={formData.severity}
+                    onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
+                    className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="CRITICAL">Critical</option>
+                    <option value="HIGH">High</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="LOW">Low</option>
+                    <option value="INFO">Info</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Status */}
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                   Status

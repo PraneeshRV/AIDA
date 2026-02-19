@@ -13,6 +13,8 @@ class CardBase(BaseModel):
     target_service: Optional[str] = None
     status: Optional[str] = None  # confirmed, potential, untested
     severity: Optional[str] = None  # CRITICAL, HIGH, MEDIUM, LOW, INFO
+    cvss_vector: Optional[str] = None  # CVSS 4.0 vector string
+    cvss_score: Optional[float] = None  # Calculated CVSS 4.0 score
     technical_analysis: Optional[str] = None
     notes: Optional[str] = None
     proof: Optional[str] = None
@@ -32,6 +34,8 @@ class CardUpdate(BaseModel):
     target_service: Optional[str] = None
     status: Optional[str] = None
     severity: Optional[str] = None
+    cvss_vector: Optional[str] = None
+    cvss_score: Optional[float] = None
     technical_analysis: Optional[str] = None
     notes: Optional[str] = None
     proof: Optional[str] = None

@@ -64,3 +64,6 @@ switch-db.sh
 
 # Artifacts directory (Gemini/Antigravity)
 .gemini/
+
+# Claude Code internal files
+.claude/
