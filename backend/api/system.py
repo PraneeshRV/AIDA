@@ -157,6 +157,18 @@ async def get_platform_setting(key: str, db: Session = Depends(get_db)):
                 value="10",
                 description="Number of recent commands to include in load_assessment (range: 5-100)"
             )
+        if key == "max_context_file_size":
+            return PlatformSettingResponse(
+                key=key,
+                value=str(settings.MAX_CONTEXT_FILE_SIZE // (1024 * 1024)),
+                description="Maximum size (MB) for a single file uploaded to /context"
+            )
+        if key == "max_source_zip_size":
+            return PlatformSettingResponse(
+                key=key,
+                value=str(settings.MAX_SOURCE_ZIP_SIZE // (1024 * 1024)),
+                description="Maximum size (MB) for a source-code ZIP uploaded to /source"
+            )
         raise fastapi.HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
     return PlatformSettingResponse(
@@ -213,6 +225,18 @@ async def update_platform_setting(
                 status_code=400,
                 detail="Command history limit must be a valid integer"
             )
+
+    # Validate file size limits (stored in MB, 1–2000)
+    if key in ("max_context_file_size", "max_source_zip_size"):
+        try:
+            mb_value = int(request.value)
+            if mb_value < 1 or mb_value > 2000:
+                raise fastapi.HTTPException(
+                    status_code=400,
+                    detail=f"{key} must be between 1 and 2000 MB"
+                )
+        except ValueError:
+            raise fastapi.HTTPException(status_code=400, detail=f"{key} must be a valid integer (MB)")
 
     # Validate container_name if updating container_name
     if key == "container_name":

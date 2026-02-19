@@ -55,6 +55,14 @@ const Settings = () => {
   const [historyLimitMessage, setHistoryLimitMessage] = useState(null);
   const [openingWorkspace, setOpeningWorkspace] = useState(false);
   const [workspaceMessage, setWorkspaceMessage] = useState(null);
+  // Upload limits
+  const [contextFileSizeMB, setContextFileSizeMB] = useState(200);
+  const [origContextFileSizeMB, setOrigContextFileSizeMB] = useState(200);
+  const [sourceZipSizeMB, setSourceZipSizeMB] = useState(200);
+  const [origSourceZipSizeMB, setOrigSourceZipSizeMB] = useState(200);
+  const [savingUploadLimits, setSavingUploadLimits] = useState(false);
+  const [uploadLimitsMessage, setUploadLimitsMessage] = useState(null);
+
 
   useEffect(() => {
     loadSystemStatus();
@@ -64,7 +72,9 @@ const Settings = () => {
     loadOutputMaxLength();
     loadCommandHistoryLimit();
     loadExegolContainers();
+    loadUploadLimits();
   }, []);
+
 
   const loadSystemStatus = async () => {
     setLoading(true);
@@ -288,6 +298,49 @@ const Settings = () => {
   const handleHistoryLimitPreset = (value) => {
     setCommandHistoryLimit(value);
   };
+
+  const loadUploadLimits = async () => {
+    try {
+      const [{ data: ctx }, { data: zip }] = await Promise.all([
+        apiClient.get('/system/settings/max_context_file_size'),
+        apiClient.get('/system/settings/max_source_zip_size'),
+      ]);
+      const ctxMB = parseInt(ctx.value) || 200;
+      const zipMB = parseInt(zip.value) || 200;
+      setContextFileSizeMB(ctxMB);
+      setOrigContextFileSizeMB(ctxMB);
+      setSourceZipSizeMB(zipMB);
+      setOrigSourceZipSizeMB(zipMB);
+    } catch {
+      // Use defaults already set in state
+    }
+  };
+
+  const handleSaveUploadLimits = async () => {
+    if (contextFileSizeMB < 1 || contextFileSizeMB > 2000 || sourceZipSizeMB < 1 || sourceZipSizeMB > 2000) {
+      setUploadLimitsMessage({ type: 'error', text: 'Values must be between 1 and 2000 MB' });
+      setTimeout(() => setUploadLimitsMessage(null), 5000);
+      return;
+    }
+    setSavingUploadLimits(true);
+    setUploadLimitsMessage(null);
+    try {
+      await Promise.all([
+        apiClient.put('/system/settings/max_context_file_size', { value: contextFileSizeMB.toString() }),
+        apiClient.put('/system/settings/max_source_zip_size', { value: sourceZipSizeMB.toString() }),
+      ]);
+      setOrigContextFileSizeMB(contextFileSizeMB);
+      setOrigSourceZipSizeMB(sourceZipSizeMB);
+      setUploadLimitsMessage({ type: 'success', text: 'Upload limits saved' });
+      setTimeout(() => setUploadLimitsMessage(null), 3000);
+    } catch (error) {
+      setUploadLimitsMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to save upload limits' });
+      setTimeout(() => setUploadLimitsMessage(null), 5000);
+    } finally {
+      setSavingUploadLimits(false);
+    }
+  };
+
 
   const handleOpenWorkspace = async () => {
     setOpeningWorkspace(true);
@@ -801,6 +854,81 @@ const Settings = () => {
                 )}
               </div>
             </div>
+
+            {/* Upload Limits */}
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">Upload Limits</h2>
+              <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
+                <div className="space-y-4">
+                  {/* Context file size */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Context File Limit</span>
+                      <span className="text-xs text-neutral-500">(/context uploads)</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {[10, 50, 100, 200, 500].map((mb) => (
+                        <button key={mb} onClick={() => setContextFileSizeMB(mb)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${contextFileSizeMB === mb
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400'
+                            }`}>{mb}MB</button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min="1" max="2000" value={contextFileSizeMB}
+                        onChange={(e) => setContextFileSizeMB(parseInt(e.target.value) || 1)}
+                        className="w-24 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <span className="text-xs text-neutral-600 dark:text-neutral-400">MB</span>
+                    </div>
+                  </div>
+
+                  {/* Source ZIP size */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Source ZIP Limit</span>
+                      <span className="text-xs text-neutral-500">(git ZIPs auto-routed to /source)</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {[100, 200, 500, 1000, 2000].map((mb) => (
+                        <button key={mb} onClick={() => setSourceZipSizeMB(mb)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${sourceZipSizeMB === mb
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400'
+                            }`}>{mb}MB</button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min="1" max="2000" value={sourceZipSizeMB}
+                        onChange={(e) => setSourceZipSizeMB(parseInt(e.target.value) || 1)}
+                        className="w-24 px-2 py-1.5 border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <span className="text-xs text-neutral-600 dark:text-neutral-400">MB</span>
+                    </div>
+                  </div>
+
+                  {/* Save */}
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-200 dark:border-neutral-700">
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">Changes take effect immediately (no restart required).</p>
+                    <button onClick={handleSaveUploadLimits}
+                      disabled={savingUploadLimits || (contextFileSizeMB === origContextFileSizeMB && sourceZipSizeMB === origSourceZipSizeMB)}
+                      className="px-3 py-1.5 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                      {savingUploadLimits ? <><RefreshCw className="w-3 h-3 animate-spin" />Saving</> : <><Save className="w-3 h-3" />Save</>}
+                    </button>
+                  </div>
+
+                  {uploadLimitsMessage && (
+                    <div className={`p-2 rounded text-xs flex items-center gap-1.5 ${uploadLimitsMessage.type === 'success'
+                      ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                      }`}>
+                      {uploadLimitsMessage.type === 'success' ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                      <span>{uploadLimitsMessage.text}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
 
             {/* System Info */}
             {systemInfo && (

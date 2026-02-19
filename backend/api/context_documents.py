@@ -1,9 +1,12 @@
 """
 Context Documents API - Endpoints for managing user-provided context documents
 """
+import asyncio
+import io
 import os
-import shutil
-from typing import List
+import re
+import tempfile
+import zipfile
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 
@@ -19,7 +22,7 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/assessments", tags=["context_documents"])
 
-# Allowed
+# Allowed file extensions for regular context uploads
 ALLOWED_EXTENSIONS = {
     '.pdf', '.txt', '.md', '.doc', '.docx',
     '.json', '.yaml', '.yml', '.xml', '.ini', '.conf',
@@ -28,9 +31,26 @@ ALLOWED_EXTENSIONS = {
     '.csv', '.log', '.html', '.htm'
 }
 
-# File size limits
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_TOTAL_SIZE = 50 * 1024 * 1024  # 50MB per assessment
+# Fallback constants (overridden by DB platform_settings at request time)
+_DEFAULT_FILE_MB  = 200
+_DEFAULT_ZIP_MB   = 200
+_DEFAULT_TOTAL_MB = 500
+
+
+def _get_upload_limits(db: Session) -> tuple:
+    """Read upload limits (in bytes) from PlatformSettings, fall back to settings/defaults."""
+    def _mb(key: str, default_mb: int) -> int:
+        row = db.query(PlatformSettings).filter(PlatformSettings.key == key).first()
+        try:
+            return int(row.value) * 1024 * 1024 if row else default_mb * 1024 * 1024
+        except (ValueError, TypeError):
+            return default_mb * 1024 * 1024
+
+    return (
+        _mb("max_context_file_size", _DEFAULT_FILE_MB),
+        _mb("max_source_zip_size",   _DEFAULT_ZIP_MB),
+        _DEFAULT_TOTAL_MB * 1024 * 1024,
+    )
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -82,6 +102,39 @@ async def _get_context_path(assessment_id: int, db: Session) -> tuple[str, str]:
     return container_name, context_path
 
 
+def _zip_contains_git(content: bytes) -> bool:
+    """Peek inside a ZIP to check if it contains a .git/ directory (= source repo)."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            return any(
+                name == ".git/" or name.startswith(".git/") or "/.git/" in name
+                for name in zf.namelist()
+            )
+    except zipfile.BadZipFile:
+        return False
+
+
+def _sanitize_source_name(name: str) -> str:
+    safe = re.sub(r'[^a-zA-Z0-9._\-]', '_', name)
+    safe = safe.lstrip('.-')
+    return (safe or "source")[:128]
+
+
+async def _docker_exec_ctx(container: str, cmd: list, timeout: int = 120) -> tuple:
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "exec", container, *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        raise
+    return proc.returncode, out.decode(errors="replace"), err.decode(errors="replace")
+
+
 @router.post("/{assessment_id}/context/upload", status_code=status.HTTP_201_CREATED)
 async def upload_context_document(
     assessment_id: int,
@@ -89,97 +142,170 @@ async def upload_context_document(
     db: Session = Depends(get_db)
 ):
     """
-    Upload a context document to assessment workspace
-    
-    Args:
-        assessment_id: ID of the assessment
-        file: File to upload
-        
-    Returns:
-        Dict with filename, size, and path
+    Upload a context document.
+    - Regular files → /context/ (unchanged behaviour)
+    - ZIP containing .git/ → extract to /source/, strip .git (source code repo)
     """
     logger.info("Uploading context document", assessment_id=assessment_id, filename=file.filename)
-    
+
     try:
-        # Validate file extension
-        file_ext = os.path.splitext(file.filename)[1].lower()
+        file_ext = os.path.splitext(file.filename or "")[1].lower()
         if file_ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
-                detail=f"File type '{file_ext}' not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+                detail=f"File type '{file_ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
             )
-        
-        # Sanitize filename
-        safe_filename = _sanitize_filename(file.filename)
-        
-        # Read file content
+
         content = await file.read()
         file_size = len(content)
-        
-        # Validate file size
-        if file_size > MAX_FILE_SIZE:
+
+        # ── Smart ZIP routing ───────────────────────────────────────────────
+        if file_ext == ".zip" and _zip_contains_git(content):
+            logger.info("ZIP contains .git — routing to /source/", assessment_id=assessment_id, filename=file.filename)
+            return await _extract_source_zip(assessment_id, file.filename, content, db)
+
+        # ── Regular context upload ──────────────────────────────────────────
+        max_file_size, _, _ = _get_upload_limits(db)
+        if file_size > max_file_size:
             raise HTTPException(
                 status_code=400,
-                detail=f"File size ({file_size / 1024 / 1024:.2f}MB) exceeds limit ({MAX_FILE_SIZE / 1024 / 1024}MB)"
+                detail=f"File size ({file_size/1024/1024:.2f}MB) exceeds limit ({max_file_size//1024//1024}MB)"
             )
-        
-        # Get context path
+
+        safe_filename = _sanitize_filename(file.filename)
         container_name, context_path = await _get_context_path(assessment_id, db)
-        
-        # Create temp file on host
+
         temp_file_path = f"/tmp/{safe_filename}"
         with open(temp_file_path, "wb") as f:
             f.write(content)
-        
+
         try:
-            # Copy file to container
             container_service = ContainerService()
             container_service.current_container = container_name
-            
-            # Ensure context directory exists
             await container_service.execute_container_command(f"mkdir -p {context_path}")
-            
-            # Copy file from host to container
-            import asyncio
+
             process = await asyncio.create_subprocess_exec(
                 "docker", "cp", temp_file_path, f"{container_name}:{context_path}/{safe_filename}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
-            
+
             if process.returncode != 0:
-                error_msg = stderr.decode('utf-8', errors='replace')
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Failed to copy file to container: {error_msg}"
+                    detail=f"Failed to copy file to container: {stderr.decode('utf-8', errors='replace')}"
                 )
-            
-            logger.info(
-                "Context document uploaded successfully",
-                assessment_id=assessment_id,
-                filename=safe_filename,
-                size=file_size
-            )
-            
+
+            logger.info("Context document uploaded", assessment_id=assessment_id, filename=safe_filename, size=file_size)
             return {
                 "success": True,
+                "routed_to": "context",
                 "filename": safe_filename,
                 "size": file_size,
-                "size_human": f"{file_size / 1024:.2f}KB" if file_size < 1024 * 1024 else f"{file_size / 1024 / 1024:.2f}MB",
+                "size_human": f"{file_size/1024:.2f}KB" if file_size < 1024*1024 else f"{file_size/1024/1024:.2f}MB",
                 "path": f"{context_path}/{safe_filename}"
             }
-            
         finally:
-            # Clean up temp file
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error("Failed to upload context document", assessment_id=assessment_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _extract_source_zip(assessment_id: int, filename: str, content: bytes, db: Session) -> dict:
+    """Extract a ZIP that contains a .git repo into /source/, stripping the .git metadata."""
+    _, max_zip_size, _ = _get_upload_limits(db)
+    if len(content) > max_zip_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ZIP too large ({len(content)/1024/1024:.1f}MB, max {max_zip_size//1024//1024}MB)"
+        )
+
+    assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+    container_name = assessment.container_name
+    if not container_name:
+        setting = db.query(PlatformSettings).filter(PlatformSettings.key == "container_name").first()
+        container_name = setting.value if setting else settings.DEFAULT_CONTAINER_NAME
+
+    dir_name = _sanitize_source_name(os.path.splitext(os.path.basename(filename or "source"))[0])
+    container_source_dir = f"{assessment.workspace_path}/source"
+    container_target = f"{container_source_dir}/{dir_name}"
+    container_zip = f"{container_source_dir}/{dir_name}.zip"
+
+    rc, _, _ = await _docker_exec_ctx(container_name, ["test", "-d", container_target], timeout=10)
+    if rc == 0:
+        raise HTTPException(status_code=409, detail=f"'{dir_name}' already exists in /source. Delete it first.")
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        await _docker_exec_ctx(container_name, ["mkdir", "-p", container_source_dir], timeout=10)
+
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "cp", tmp_path, f"{container_name}:{container_zip}",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        _, err = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"docker cp failed: {err.decode(errors='replace').strip()}")
+
+        # Extract
+        rc_uz, _, _ = await _docker_exec_ctx(container_name, ["which", "unzip"], timeout=5)
+        if rc_uz == 0:
+            rc, _, stderr = await _docker_exec_ctx(
+                container_name, ["unzip", "-q", container_zip, "-d", container_target], timeout=120
+            )
+        else:
+            rc, _, stderr = await _docker_exec_ctx(
+                container_name,
+                ["python3", "-c",
+                 f"import zipfile,os; z=zipfile.ZipFile('{container_zip}'); os.makedirs('{container_target}',exist_ok=True); z.extractall('{container_target}'); z.close()"],
+                timeout=120
+            )
+
+        await _docker_exec_ctx(container_name, ["rm", "-f", container_zip], timeout=10)
+
+        if rc != 0:
+            await _docker_exec_ctx(container_name, ["rm", "-rf", container_target], timeout=30)
+            raise HTTPException(status_code=500, detail=f"Extraction failed: {stderr.strip()}")
+
+        # Strip .git
+        await _docker_exec_ctx(container_name, ["rm", "-rf", f"{container_target}/.git"], timeout=60)
+
+        # Write metadata
+        await _docker_exec_ctx(
+            container_name,
+            ["bash", "-c", f"printf 'type=zip\\n' > {container_target}/.source_meta"],
+            timeout=5
+        )
+
+        logger.info("Source ZIP extracted from context upload", assessment_id=assessment_id, dir_name=dir_name)
+        return {
+            "success": True,
+            "routed_to": "source",
+            "name": dir_name,
+            "type": "zip",
+            "path": f"source/{dir_name}",
+            "size": len(content),
+            "size_human": f"{len(content)/1024/1024:.1f}MB"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 
 
 @router.get("/{assessment_id}/context/files")

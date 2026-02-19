@@ -12,6 +12,7 @@ import CommandHistoryRefactored from '../components/assessment/CommandHistoryRef
 import ImportScanModal from '../components/assessment/ImportScanModal';
 import CredentialsManager from '../components/assessment/CredentialsManager';
 import ContextDocumentsPanel from '../components/assessment/ContextDocumentsPanel';
+
 import ChangeContainerModal from '../components/workspace/ChangeContainerModal';
 import MarkdownDocumentsModal from '../components/assessment/MarkdownDocumentsModal';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -532,6 +533,8 @@ const AssessmentDetail = () => {
       <div>
         <ContextDocumentsPanel assessmentId={parseInt(id)} />
       </div>
+
+
 
       {/* Reconnaissance Data - Dynamic Categories */}
       <div className="space-y-3">
