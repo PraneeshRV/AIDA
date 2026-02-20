@@ -3,14 +3,8 @@ import { AlertTriangle, Info, Eye } from '../icons';
 import EditableField from '../common/EditableField';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import apiClient from '../../services/api';
-
-const PHASE_NAMES = {
-  1: 'Reconnaissance',
-  2: 'Mapping & Enumeration',
-  3: 'Vulnerability Assessment',
-  4: 'Exploitation',
-  5: 'Post-Exploitation & Reporting',
-};
+import { getSeverityTextClass } from '../../utils/severity';
+import { PHASE_NAMES } from '../../utils/phases';
 
 const PhaseContentViewSimple = ({ phaseNumber, assessmentId, section, onUpdate, cards, commands }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -29,15 +23,6 @@ const PhaseContentViewSimple = ({ phaseNumber, assessmentId, section, onUpdate, 
     }
   };
 
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'CRITICAL': return 'text-red-600 dark:text-red-400';
-      case 'HIGH': return 'text-orange-600 dark:text-orange-400';
-      case 'MEDIUM': return 'text-yellow-600 dark:text-yellow-400';
-      case 'LOW': return 'text-blue-600 dark:text-blue-400';
-      default: return 'text-neutral-600 dark:text-neutral-400';
-    }
-  };
 
   return (
     <div className="space-y-8">
@@ -118,7 +103,7 @@ const PhaseContentViewSimple = ({ phaseNumber, assessmentId, section, onUpdate, 
                 </div>
 
                 {card.severity && (
-                  <div className={`text-sm font-medium px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-700 ${getSeverityColor(card.severity)}`}>
+                  <div className={`text-sm font-medium px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-700 ${getSeverityTextClass(card.severity)}`}>
                     {card.severity}
                   </div>
                 )}

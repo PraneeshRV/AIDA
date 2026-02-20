@@ -3,14 +3,7 @@ import { ChevronDown, ChevronRight } from '../icons/index';
 import EditableField from '../common/EditableField';
 import MarkdownRenderer from '../common/MarkdownRenderer';
 import apiClient from '../../services/api';
-
-const PHASE_NAMES = {
-  1: 'Reconnaissance',
-  2: 'Mapping & Enumeration',
-  3: 'Vulnerability Assessment',
-  4: 'Exploitation',
-  5: 'Post-Exploitation & Reporting',
-};
+import { PHASE_NAMES } from '../../utils/phases';
 
 const PhaseSection = ({ phaseNumber, assessmentId, section, onUpdate }) => {
   const [isExpanded, setIsExpanded] = useState(phaseNumber <= 2); // Expand first 2 phases by default

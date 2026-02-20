@@ -16,6 +16,8 @@ import ContextDocumentsPanel from '../components/assessment/ContextDocumentsPane
 import ChangeContainerModal from '../components/workspace/ChangeContainerModal';
 import MarkdownDocumentsModal from '../components/assessment/MarkdownDocumentsModal';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { getSeverityBarClass } from '../utils/severity';
+import { PHASE_NAMES } from '../utils/phases';
 
 const AssessmentDetail = () => {
   const { id } = useParams();
@@ -279,16 +281,6 @@ const AssessmentDetail = () => {
   };
 
   const riskDistribution = getRiskDistribution();
-
-  const getSeverityBarColor = (severity) => {
-    switch (severity) {
-      case 'CRITICAL': return 'bg-red-500';
-      case 'HIGH': return 'bg-orange-500';
-      case 'MEDIUM': return 'bg-yellow-500';
-      case 'LOW': return 'bg-blue-500';
-      default: return 'bg-neutral-500';
-    }
-  };
 
   if (loading) {
     return (
@@ -687,7 +679,7 @@ const AssessmentDetail = () => {
                     <div className="flex h-8 bg-neutral-100 dark:bg-neutral-700 rounded-lg overflow-hidden">
                       {riskDistribution.critical > 0 && (
                         <div
-                          className={`${getSeverityBarColor('CRITICAL')} flex items-center justify-center text-white text-xs font-medium`}
+                          className={`${getSeverityBarClass('CRITICAL')} flex items-center justify-center text-white text-xs font-medium`}
                           style={{ width: `${riskDistribution.critical}%` }}
                         >
                           {riskDistribution.critical}%
@@ -695,7 +687,7 @@ const AssessmentDetail = () => {
                       )}
                       {riskDistribution.high > 0 && (
                         <div
-                          className={`${getSeverityBarColor('HIGH')} flex items-center justify-center text-white text-xs font-medium`}
+                          className={`${getSeverityBarClass('HIGH')} flex items-center justify-center text-white text-xs font-medium`}
                           style={{ width: `${riskDistribution.high}%` }}
                         >
                           {riskDistribution.high}%
@@ -703,7 +695,7 @@ const AssessmentDetail = () => {
                       )}
                       {riskDistribution.medium > 0 && (
                         <div
-                          className={`${getSeverityBarColor('MEDIUM')} flex items-center justify-center text-white text-xs font-medium`}
+                          className={`${getSeverityBarClass('MEDIUM')} flex items-center justify-center text-white text-xs font-medium`}
                           style={{ width: `${riskDistribution.medium}%` }}
                         >
                           {riskDistribution.medium}%
@@ -711,7 +703,7 @@ const AssessmentDetail = () => {
                       )}
                       {riskDistribution.low > 0 && (
                         <div
-                          className={`${getSeverityBarColor('LOW')} flex items-center justify-center text-white text-xs font-medium`}
+                          className={`${getSeverityBarClass('LOW')} flex items-center justify-center text-white text-xs font-medium`}
                           style={{ width: `${riskDistribution.low}%` }}
                         >
                           {riskDistribution.low}%
@@ -824,14 +816,6 @@ const AssessmentDetail = () => {
           {/* Navigation horizontale des phases */}
           <div className="flex space-x-1 border-b border-gray-200 dark:border-neutral-700">
             {[1, 2, 3, 4, 5].map((phaseNum) => {
-              const PHASE_NAMES = {
-                1: 'Reconnaissance',
-                2: 'Mapping & Enumeration',
-                3: 'Vulnerability Assessment',
-                4: 'Exploitation',
-                5: 'Post-Exploitation & Reporting',
-              };
-
               const section = sections.find(s => s.section_type === `phase_${phaseNum}`);
               const hasContent = section?.content;
 
