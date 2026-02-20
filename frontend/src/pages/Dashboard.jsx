@@ -8,9 +8,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   TrendingUp,
-  TrendingDown,
-  CheckCircle,
-  XCircle
+  TrendingDown
 } from '../components/icons';
 import apiClient from '../services/api';
 import { commandService } from '../services/commandService';
@@ -470,72 +468,92 @@ const Dashboard = () => {
                   })()}
                 </svg>
 
-                {/* Interactive overlay with points */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                {/* Interactive overlay - invisible columns for hover detection */}
+                <div 
+                  className="absolute inset-0 flex"
+                  onMouseLeave={() => setHoveredDay(null)}
+                >
                   {commandsTimelineData.map((data, index) => {
-                    const xPercent = commandsTimelineData.length > 1
-                      ? (index / (commandsTimelineData.length - 1)) * 100
-                      : 50;
-                    const ySuccessPercent = ((data.success / maxCommandsPerDay) * 95);
-                    const yFailedPercent = ((data.failed / maxCommandsPerDay) * 95);
-
+                    const isHovered = hoveredDay === index;
                     return (
-                      <g key={index}>
-                        {/* Success point */}
-                        <circle
-                          cx={`${xPercent}%`}
-                          cy={`${100 - ySuccessPercent}%`}
-                          r="5"
-                          fill="#10b981"
-                          stroke="white"
-                          strokeWidth="2"
-                          className="pointer-events-auto cursor-pointer hover:r-8 transition-all"
-                          onMouseEnter={() => setHoveredDay(index)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                        />
-                        {/* Failed point */}
-                        <circle
-                          cx={`${xPercent}%`}
-                          cy={`${100 - yFailedPercent}%`}
-                          r="5"
-                          fill="#ef4444"
-                          stroke="white"
-                          strokeWidth="2"
-                          className="pointer-events-auto cursor-pointer hover:r-8 transition-all"
-                          onMouseEnter={() => setHoveredDay(index)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                        />
-                      </g>
+                      <div
+                        key={index}
+                        className="flex-1 relative cursor-crosshair"
+                        onMouseEnter={() => setHoveredDay(index)}
+                      >
+                        {/* Vertical hover line */}
+                        {isHovered && (
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-neutral-300 dark:bg-neutral-600 transform -translate-x-1/2 pointer-events-none" />
+                        )}
+                      </div>
                     );
                   })}
-                </svg>
+                </div>
 
-                {/* Tooltip */}
-                {hoveredDay !== null && commandsTimelineData[hoveredDay] && (
-                  <div
-                    className="absolute bg-neutral-900 dark:bg-neutral-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none z-10"
-                    style={{
-                      left: `${commandsTimelineData.length > 1 ? (hoveredDay / (commandsTimelineData.length - 1)) * 100 : 50}%`,
-                      top: '-60px',
-                      transform: 'translateX(-50%)'
-                    }}
-                  >
-                    <div className="font-semibold mb-1">
-                      {formatTooltipDate(commandsTimelineData[hoveredDay].date)}
+                {/* Hover points - small and subtle */}
+                {hoveredDay !== null && commandsTimelineData[hoveredDay] && (() => {
+                  const data = commandsTimelineData[hoveredDay];
+                  const xPercent = commandsTimelineData.length > 1
+                    ? (hoveredDay / (commandsTimelineData.length - 1)) * 100
+                    : 50;
+                  const ySuccessPercent = ((data.success / maxCommandsPerDay) * 95);
+                  const yFailedPercent = ((data.failed / maxCommandsPerDay) * 95);
+                  
+                  return (
+                    <>
+                      {/* Success point - small dot */}
+                      <div
+                        className="absolute w-2 h-2 bg-green-500 rounded-full pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          left: `${xPercent}%`,
+                          top: `${100 - ySuccessPercent}%`,
+                        }}
+                      />
+                      {/* Failed point - small dot */}
+                      <div
+                        className="absolute w-2 h-2 bg-red-500 rounded-full pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          left: `${xPercent}%`,
+                          top: `${100 - yFailedPercent}%`,
+                        }}
+                      />
+                    </>
+                  );
+                })()}
+
+                {/* Tooltip - positioned above the highest point */}
+                {hoveredDay !== null && commandsTimelineData[hoveredDay] && (() => {
+                  const data = commandsTimelineData[hoveredDay];
+                  const xPercent = commandsTimelineData.length > 1
+                    ? (hoveredDay / (commandsTimelineData.length - 1)) * 100
+                    : 50;
+                  const maxVal = Math.max(data.success, data.failed);
+                  const yMaxPercent = ((maxVal / maxCommandsPerDay) * 95);
+                  
+                  return (
+                    <div
+                      className="absolute z-10 pointer-events-none"
+                      style={{
+                        left: `${xPercent}%`,
+                        top: `${Math.max(5, 100 - yMaxPercent - 25)}%`,
+                        transform: 'translateX(-50%)'
+                      }}
+                    >
+                      <div className="bg-neutral-800 dark:bg-neutral-700 text-white text-xs rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">
+                        <div className="font-medium mb-1">{formatTooltipDate(data.date)}</div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-green-400">{data.success} success</span>
+                          <span className="text-red-400">{data.failed} failed</span>
+                        </div>
+                        <div className="border-t border-neutral-600 mt-1 pt-1 text-neutral-300">
+                          Total: {data.total}
+                        </div>
+                      </div>
+                      {/* Arrow */}
+                      <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-neutral-800 dark:bg-neutral-700 rotate-45"></div>
                     </div>
-                    <div className="flex items-center gap-2 text-green-400">
-                      <CheckCircle className="w-3 h-3" />
-                      <span>Success: {commandsTimelineData[hoveredDay].success}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-red-400">
-                      <XCircle className="w-3 h-3" />
-                      <span>Failed: {commandsTimelineData[hoveredDay].failed}</span>
-                    </div>
-                    <div className="border-t border-neutral-600 dark:border-neutral-500 mt-1 pt-1">
-                      Total: {commandsTimelineData[hoveredDay].total}
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* X-axis labels */}
