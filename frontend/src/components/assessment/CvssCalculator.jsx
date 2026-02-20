@@ -16,19 +16,15 @@ const GROUPS = [
 ];
 
 const CvssCalculator = ({ initialVector, onChange }) => {
-  const [metrics, setMetrics] = useState({ ...CVSS4_DEFAULTS });
-  const [vectorInput, setVectorInput] = useState('');
-  const [vectorError, setVectorError] = useState(null);
-
-  useEffect(() => {
+  const [metrics, setMetrics] = useState(() => {
     if (initialVector) {
       const { metrics: parsed, isValid } = parseVector(initialVector);
-      if (isValid && parsed) {
-        setMetrics({ ...CVSS4_DEFAULTS, ...parsed });
-        setVectorInput(initialVector);
-      }
+      if (isValid && parsed) return { ...CVSS4_DEFAULTS, ...parsed };
     }
-  }, [initialVector]);
+    return { ...CVSS4_DEFAULTS };
+  });
+  const [vectorInput, setVectorInput] = useState(initialVector || '');
+  const [vectorError, setVectorError] = useState(null);
 
   useEffect(() => {
     const { score, severity, vector } = metricsToScore(metrics);
