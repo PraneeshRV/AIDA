@@ -99,7 +99,9 @@ const PhaseContentViewSimple = ({ phaseNumber, assessmentId, section, onUpdate, 
                 <div className="flex-1">
                   <h5 className="font-medium text-neutral-900 dark:text-neutral-100 mb-1">{card.title}</h5>
                   <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{card.target_service}</p>
-                  <div className="text-sm text-neutral-700 dark:text-neutral-300">{card.description}</div>
+                  <div className="text-sm text-neutral-700 dark:text-neutral-300">
+                    {card.technical_analysis || card.notes || card.context || ''}
+                  </div>
                 </div>
 
                 {card.severity && (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Clock, User, Target, Globe, Server, Shield, ArrowLeft, AlertTriangle, Info, Eye, TrendingUp, Filter, FolderOpen, RefreshCw, FileText } from '../components/icons';
+import { Target, Server, Shield, ArrowLeft, AlertTriangle, Info, Eye, TrendingUp, Filter, FolderOpen, RefreshCw, FileText } from '../components/icons';
 import apiClient from '../services/api';
 import workspaceService from '../services/workspaceService';
 import EditableField from '../components/common/EditableField';
@@ -16,7 +16,7 @@ import ContextDocumentsPanel from '../components/assessment/ContextDocumentsPane
 import ChangeContainerModal from '../components/workspace/ChangeContainerModal';
 import MarkdownDocumentsModal from '../components/assessment/MarkdownDocumentsModal';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { getSeverityBarClass } from '../utils/severity';
+import { getSeverityBarClass, SEVERITY_ORDER } from '../utils/severity';
 import { PHASE_NAMES } from '../utils/phases';
 
 const AssessmentDetail = () => {
@@ -767,9 +767,8 @@ const AssessmentDetail = () => {
                     cards={cards
                       .filter(c => c.card_type === 'finding')
                       .sort((a, b) => {
-                        const severityOrder = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-                        const aOrder = severityOrder[a.severity] || 0;
-                        const bOrder = severityOrder[b.severity] || 0;
+                        const aOrder = SEVERITY_ORDER[a.severity] || 0;
+                        const bOrder = SEVERITY_ORDER[b.severity] || 0;
                         if (aOrder !== bOrder) return bOrder - aOrder;
                         return new Date(b.created_at) - new Date(a.created_at);
                       })

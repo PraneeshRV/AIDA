@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Shield, Eye, EyeOff, Info, AlertTriangle, Edit2, Trash2, Plus } from '../icons';
+import { getSeverityBadgeClass } from '../../utils/severity';
 import UnifiedModal from '../common/UnifiedModal';
 import CvssCalculator from './CvssCalculator';
 import apiClient from '../../services/api';
@@ -47,23 +48,6 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
         return <Info className="w-4 h-4" />;
       default:
         return <AlertTriangle className="w-4 h-4" />;
-    }
-  };
-
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'CRITICAL':
-        return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700';
-      case 'HIGH':
-        return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700';
-      case 'MEDIUM':
-        return 'text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700';
-      case 'LOW':
-        return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700';
-      case 'INFO':
-        return 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/30 border-cyan-200 dark:border-cyan-700';
-      default:
-        return 'text-neutral-600 dark:text-neutral-400 bg-neutral-50 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700';
     }
   };
 
@@ -241,7 +225,7 @@ const CardsTable = ({ cards, assessmentId, onUpdate }) => {
 
                     {/* Severity Badge + CVSS Score */}
                     {cardType === 'finding' && (
-                      <span className={`px-2 py-1 text-xs font-medium rounded border ${getSeverityColor(severity)}`}>
+                      <span className={`px-2 py-1 text-xs font-medium rounded border ${getSeverityBadgeClass(severity)}`}>
                         {severity}
                         {card.cvss_score != null && (
                           <span className="ml-1 font-mono opacity-80">{card.cvss_score.toFixed(1)}</span>

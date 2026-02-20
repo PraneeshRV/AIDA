@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Shield, AlertTriangle, TrendingUp, Target } from '../icons';
 import CardsTable from './CardsTable';
-import { getSeverityBarClass } from '../../utils/severity';
+import { getSeverityBarClass, SEVERITY_ORDER } from '../../utils/severity';
 
 const OverviewView = ({ cards, assessmentId, onUpdate }) => {
   // Calculate statistics
@@ -52,12 +52,10 @@ const OverviewView = ({ cards, assessmentId, onUpdate }) => {
     const findings = cards.filter(c => c.card_type === 'finding');
     
     // Sort by severity priority (Critical > High > Medium > Low)
-    const severityOrder = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-    
     return findings
       .sort((a, b) => {
-        const aOrder = severityOrder[a.severity] || 0;
-        const bOrder = severityOrder[b.severity] || 0;
+        const aOrder = SEVERITY_ORDER[a.severity] || 0;
+        const bOrder = SEVERITY_ORDER[b.severity] || 0;
         if (aOrder !== bOrder) return bOrder - aOrder;
         return new Date(b.created_at) - new Date(a.created_at);
       })
