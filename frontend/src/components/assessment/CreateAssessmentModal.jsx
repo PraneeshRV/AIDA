@@ -40,8 +40,8 @@ const CreateAssessmentModal = ({ onClose, onSuccess }) => {
         category: formData.category || null, // Ensure category is included
       };
 
-      await apiClient.post('/assessments', payload);
-      onSuccess();
+      const response = await apiClient.post('/assessments', payload);
+      onSuccess(response.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create assessment');
     } finally {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
   Terminal,
@@ -8,8 +8,12 @@ import {
   AlertTriangle,
   ArrowUpRight,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Plus,
+  Play
 } from '../components/icons';
+import CreateAssessmentModal from '../components/assessment/CreateAssessmentModal';
+import assessmentService from '../services/assessmentService';
 import apiClient from '../services/api';
 import { commandService } from '../services/commandService';
 import toolStatsService from '../services/toolStatsService';
@@ -65,13 +69,15 @@ const generateSmoothPath = (points, closePath) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [assessments, setAssessments] = useState([]);
   const [allFindings, setAllFindings] = useState([]);
   const [allCommands, setAllCommands] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [timelinePeriod, setTimelinePeriod] = useState('30'); // 30, 90, 180, 365 days
+  const [timelinePeriod, setTimelinePeriod] = useState('30');
   const [hoveredDay, setHoveredDay] = useState(null);
   const [topTools, setTopTools] = useState([]);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -202,6 +208,21 @@ const Dashboard = () => {
       .slice(0, 5);
   }, [allFindings]);
 
+  // Last active assessment for "Resume" button
+  const lastActiveAssessment = useMemo(() => {
+    return assessments
+      .filter(a => a.status === 'active')
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
+  }, [assessments]);
+
+  // Handle assessment creation and redirect
+  const handleCreateAssessment = async (createdAssessment) => {
+    if (!createdAssessment?.id) return;
+    
+    setIsCreateModalOpen(false);
+    navigate(`/assessments/${createdAssessment.id}`);
+  };
+
   // Commands timeline data (by day)
   const commandsTimelineData = useMemo(() => {
     const days = parseInt(timelinePeriod);
@@ -283,13 +304,41 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6 animate-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">Dashboard</h1>
-        <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          Real-time security assessment analytics
-        </p>
+      {/* Header with Quick Actions */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-neutral-900 dark:text-neutral-100">Dashboard</h1>
+          <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+            Real-time security assessment analytics
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Assessment
+          </button>
+          {lastActiveAssessment && (
+            <Link
+              to={`/assessments/${lastActiveAssessment.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 rounded-md transition-colors"
+            >
+              <Play className="w-3.5 h-3.5" />
+              Resume {lastActiveAssessment.name}
+            </Link>
+          )}
+        </div>
       </div>
+
+      {/* Create Assessment Modal */}
+      {isCreateModalOpen && (
+        <CreateAssessmentModal
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={handleCreateAssessment}
+        />
+      )}
 
       {/* KPIs - Compact sans cadres lourds */}
       <div className="grid grid-cols-4 gap-6">
