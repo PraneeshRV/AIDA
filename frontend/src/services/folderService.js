@@ -56,9 +56,9 @@ export const folderService = {
     return data;
   },
 
-  // Duplicate assessment
-  async duplicateAssessment(assessmentId) {
-    const { data } = await apiClient.post(`/assessments/${assessmentId}/duplicate`);
+  // Duplicate assessment with optional data copy
+  async duplicateAssessment(assessmentId, options = {}) {
+    const { data } = await apiClient.post(`/assessments/${assessmentId}/duplicate`, options);
     return data;
   }
 };

@@ -83,3 +83,11 @@ class AssessmentListResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DuplicateAssessmentRequest(BaseModel):
+    name: Optional[str] = None
+    include_cards: bool = False
+    include_sections: bool = False
+    include_recon: bool = False
+    include_commands: bool = False

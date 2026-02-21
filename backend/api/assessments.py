@@ -9,12 +9,13 @@ from sqlalchemy import func
 from pydantic import BaseModel
 
 from database import get_db
-from models import Assessment, AssessmentSection, Card, ReconData, Folder
+from models import Assessment, AssessmentSection, Card, ReconData, Folder, CommandHistory
 from schemas.assessment import (
     AssessmentCreate,
     AssessmentUpdate,
     AssessmentResponse,
-    AssessmentListResponse
+    AssessmentListResponse,
+    DuplicateAssessmentRequest,
 )
 from services.assessment_service import AssessmentService
 from services.scan_importer import ScanImporter, ScanImportError
@@ -236,9 +237,10 @@ async def delete_assessment(
 @router.post("/{assessment_id}/duplicate", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)
 async def duplicate_assessment(
     assessment_id: int,
+    options: DuplicateAssessmentRequest = Body(default=DuplicateAssessmentRequest()),
     db: Session = Depends(get_db)
 ):
-    """Duplicate an assessment with a new workspace"""
+    """Duplicate an assessment with a new workspace and optional data copy"""
     original = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not original:
         raise HTTPException(
@@ -247,11 +249,20 @@ async def duplicate_assessment(
         )
 
     # Generate unique name for duplicate
-    duplicate_name = f"{original.name} (Copy)"
-    counter = 1
-    while db.query(Assessment).filter(Assessment.name == duplicate_name).first():
-        counter += 1
-        duplicate_name = f"{original.name} (Copy {counter})"
+    if options.name and options.name.strip():
+        duplicate_name = options.name.strip()
+        # If the provided name already exists, reject it
+        if db.query(Assessment).filter(Assessment.name == duplicate_name).first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"An assessment with the name '{duplicate_name}' already exists"
+            )
+    else:
+        duplicate_name = f"{original.name} (Copy)"
+        counter = 1
+        while db.query(Assessment).filter(Assessment.name == duplicate_name).first():
+            counter += 1
+            duplicate_name = f"{original.name} (Copy {counter})"
 
     # Create duplicate with new workspace
     service = AssessmentService(db)
@@ -275,9 +286,72 @@ async def duplicate_assessment(
     # Create assessment with workspace
     duplicate = await service.create_assessment(duplicate_data)
 
-    # Set folder to same as original (optional organization)
+    # Set folder to same as original
     if original.folder_id:
         duplicate.folder_id = original.folder_id
+        db.commit()
+        db.refresh(duplicate)
+
+    # Conditionally copy related data
+    needs_commit = False
+
+    if options.include_cards:
+        for card in original.cards:
+            db.add(Card(
+                assessment_id=duplicate.id,
+                card_type=card.card_type,
+                title=card.title,
+                target_service=card.target_service,
+                severity=card.severity,
+                status=card.status,
+                section_number=card.section_number,
+                technical_analysis=card.technical_analysis,
+                proof=card.proof,
+                notes=card.notes,
+                context=card.context,
+                cvss_vector=card.cvss_vector,
+                cvss_score=card.cvss_score,
+            ))
+        needs_commit = True
+
+    if options.include_sections:
+        for section in original.sections:
+            db.add(AssessmentSection(
+                assessment_id=duplicate.id,
+                section_type=section.section_type,
+                section_number=section.section_number,
+                title=section.title,
+                content=section.content,
+            ))
+        needs_commit = True
+
+    if options.include_recon:
+        for recon in original.recon_data:
+            db.add(ReconData(
+                assessment_id=duplicate.id,
+                data_type=recon.data_type,
+                name=recon.name,
+                details=recon.details,
+                discovered_in_phase=recon.discovered_in_phase,
+            ))
+        needs_commit = True
+
+    if options.include_commands:
+        for cmd in original.command_history:
+            db.add(CommandHistory(
+                assessment_id=duplicate.id,
+                command=cmd.command,
+                stdout=cmd.stdout,
+                stderr=cmd.stderr,
+                returncode=cmd.returncode,
+                execution_time=cmd.execution_time,
+                success=cmd.success,
+                phase=cmd.phase,
+                status=cmd.status,
+            ))
+        needs_commit = True
+
+    if needs_commit:
         db.commit()
         db.refresh(duplicate)
 

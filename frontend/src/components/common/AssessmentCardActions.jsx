@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { MoreVertical } from 'lucide-react';
 import ContextMenu from './ContextMenu';
-import folderService from '../../services/folderService';
+import DuplicateAssessmentModal from '../assessment/DuplicateAssessmentModal';
 
 const AssessmentCardActions = ({
   assessment,
@@ -11,6 +11,7 @@ const AssessmentCardActions = ({
 }) => {
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const buttonRef = useRef(null);
 
   const handleMenuClick = (event) => {
@@ -34,13 +35,9 @@ const AssessmentCardActions = ({
     }
   };
 
-  const handleDuplicate = async () => {
-    try {
-      await folderService.duplicateAssessment(assessment.id);
-      onAssessmentUpdate();
-    } catch (error) {
-      console.error('Failed to duplicate assessment:', error);
-    }
+  const handleDuplicate = () => {
+    setIsContextMenuOpen(false);
+    setIsDuplicateModalOpen(true);
   };
 
   const handleDelete = async () => {
@@ -84,6 +81,13 @@ const AssessmentCardActions = ({
         onShare={handleShare}
         folders={folders}
         assessment={assessment}
+      />
+
+      <DuplicateAssessmentModal
+        assessment={assessment}
+        isOpen={isDuplicateModalOpen}
+        onClose={() => setIsDuplicateModalOpen(false)}
+        onSuccess={onAssessmentUpdate}
       />
     </>
   );
